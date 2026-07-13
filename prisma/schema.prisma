@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id           Int           @id @default(autoincrement())
+  username     String        @unique
+  password     String
+  name         String
+  position     String?
+  role         String        // "ADMIN", "PROGRAM_HEAD", "FACULTY_STAFF"
+  departmentId Int?
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  tasks        Task[]
+  activityLogs ActivityLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Task {
+  id              Int       @id @default(autoincrement())
+  entryDate       DateTime
+  targetDate      DateTime?
+  category        String
+  taskDescription String
+  priority        String    // "High", "Medium", "Low"
+  status          String    // "Not Started", "Ongoing", "Completed", "Delayed"
+  progress        Int       @default(0) // 0 to 100
+  remarks         String?
+  evidenceLink    String?
+  archived        Boolean   @default(false)
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id])
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model ActivityLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  action    String   // e.g. "LOGIN", "LOGOUT", "CREATE_TASK", "UPDATE_TASK", "COMPLETE_TASK", "ARCHIVE_TASK", "CREATE_USER", "UPDATE_USER"
+  details   String
+  createdAt DateTime @default(now())
+}
+
