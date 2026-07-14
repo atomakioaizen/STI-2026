@@ -17,6 +17,7 @@ export default function AdminPortal({ user }) {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingArchive, setLoadingArchive] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null); 
 
   // Active Modals / Views
   const [activeModal, setActiveModal] = useState(null); // 'tasks' | 'users' | 'departments' | 'calendar' | 'insights' | 'archive' | 'nominate'
@@ -177,30 +178,40 @@ export default function AdminPortal({ user }) {
     fetchTasks();
   };
 
-  const handleDeleteUser = async (userId) => {
-    if (!confirm('Are you sure you want to delete this user account? This cannot be undone.')) return;
-    try {
-      const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchUsers();
-        fetchTasks();
+  const handleDeleteUser = (userId) => {
+    setConfirmDialog({
+      title: 'Delete User Account',
+      message: 'Are you sure you want to delete this user account? This action cannot be undone.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+          if (res.ok) {
+            fetchUsers();
+            fetchTasks();
+          }
+        } catch (err) {
+          console.error(err);
+        }
       }
-    } catch (err) {
-      console.error(err);
-    }
+    });
   };
 
-  const handleDeleteDepartment = async (deptId) => {
-    if (!confirm('Are you sure you want to delete this department? All associated users will have their department cleared.')) return;
-    try {
-      const res = await fetch(`/api/departments?id=${deptId}`, { method: 'DELETE' });
-      if (res.ok) {
-        fetchDepartments();
-        fetchUsers();
+  const handleDeleteDepartment = (deptId) => {
+    setConfirmDialog({
+      title: 'Delete Department',
+      message: 'Are you sure you want to delete this department? All associated users will have their department cleared.',
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`/api/departments?id=${deptId}`, { method: 'DELETE' });
+          if (res.ok) {
+            fetchDepartments();
+            fetchUsers();
+          }
+        } catch (err) {
+          console.error(err);
+        }
       }
-    } catch (err) {
-      console.error(err);
-    }
+    });
   };
 
   const handleCreateUser = async (e) => {
@@ -589,8 +600,8 @@ export default function AdminPortal({ user }) {
 
       {/* Task nominations modal */}
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 md:p-6 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full h-[80vh] max-h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
             <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />
@@ -1422,6 +1433,36 @@ export default function AdminPortal({ user }) {
                 </div>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Gorgeous Custom Confirmation Dialog */}
+      {confirmDialog && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-sm w-full animate-scaleIn text-zinc-900">
+            <div className="flex items-center gap-3 text-red-600 mb-3">
+              <ShieldAlert className="h-6 w-6" />
+              <h4 className="font-black text-base uppercase tracking-wide">{confirmDialog.title}</h4>
+            </div>
+            <p className="text-xs text-zinc-600 font-bold mb-6 leading-relaxed">{confirmDialog.message}</p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setConfirmDialog(null)}
+                className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-250 text-zinc-700 font-bold rounded-lg text-xs transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  confirmDialog.onConfirm();
+                  setConfirmDialog(null);
+                }}
+                className="px-4 py-2 bg-red-600 hover:bg-red-750 text-white font-bold rounded-lg text-xs transition shadow-md active:scale-95"
+              >
+                Confirm
+              </button>
+            </div>
           </div>
         </div>
       )}

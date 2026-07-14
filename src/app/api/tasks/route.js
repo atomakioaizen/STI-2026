@@ -139,11 +139,15 @@ export async function GET(request) {
     // Archived filter: default to archived = false
     const archivedParam = searchParams.get('archived');
     if (archivedParam === 'true') {
-      where.archived = true;
+      where.OR = [
+        { archived: true },
+        { status: 'Completed' }
+      ];
     } else if (archivedParam === 'all') {
       // Do not filter by archived
     } else {
       where.archived = false;
+      where.status = { not: 'Completed' };
     }
 
     // 5. Apply timeframe date filters

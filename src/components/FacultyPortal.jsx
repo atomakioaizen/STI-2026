@@ -398,8 +398,8 @@ export default function FacultyPortal({ user }) {
 
       {/* Active Tasks Modal */}
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 md:p-6 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full h-[80vh] max-h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
             <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />

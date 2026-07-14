@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Trophy, Medal, Star, TrendingUp, Users, Crown,
   Calendar, ChevronDown, Award, Zap, Clock, BarChart3,

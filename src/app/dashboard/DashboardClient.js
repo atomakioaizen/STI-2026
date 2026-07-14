@@ -220,33 +220,53 @@ export default function DashboardClient({ user }) {
         )}
       </main>
 
-      {/* Floating Calendar Widget */}
+      {/* Sticky Interactive Calendar Widget (Bottom Right) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-        {isCalendarOpen && (
-          <div className="bg-white/95 border border-zinc-200 shadow-2xl rounded-2xl p-4 mb-3 w-[360px] sm:w-[380px] max-h-[500px] overflow-y-auto animate-scaleIn">
-            <div className="flex justify-between items-center mb-2 pb-2 border-b border-zinc-100">
-              <h4 className="text-xs font-black text-zinc-800 flex items-center gap-1.5 uppercase tracking-wide">
-                <Calendar className="h-4 w-4 text-blue-600 animate-pulse" />
-                Deadlines Calendar
-              </h4>
-              <button 
-                onClick={() => setIsCalendarOpen(false)}
-                className="text-[10px] text-zinc-400 hover:text-zinc-700 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded font-bold transition"
-              >
-                Close
-              </button>
-            </div>
-            <CalendarView tasks={tasks} isFloating={true} />
-          </div>
-        )}
-        <button
-          id="floating-calendar-trigger"
-          onClick={() => setIsCalendarOpen(!isCalendarOpen)}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl hover:bg-blue-700 active:scale-95 transition-all duration-200 border-2 border-white focus:outline-none"
-          title="Interactive Deadlines Calendar"
+        <div className={`transition-all duration-300 ease-in-out bg-white/80 backdrop-blur-md border border-zinc-250/60 shadow-2xl rounded-2xl overflow-hidden flex flex-col ${
+          isCalendarOpen 
+            ? 'w-[400px] h-[550px] p-4 opacity-100' 
+            : 'w-72 h-14 p-3 hover:bg-white/95 cursor-pointer opacity-90 hover:opacity-100'
+        }`}
+        onClick={() => { if (!isCalendarOpen) setIsCalendarOpen(true); }}
         >
-          <Calendar className="h-6 w-6" />
-        </button>
+          {isCalendarOpen ? (
+            <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex justify-between items-center mb-3 pb-2 border-b border-zinc-200/50 flex-shrink-0">
+                <h4 className="text-xs font-black text-zinc-800 flex items-center gap-1.5 uppercase tracking-wide">
+                  <Calendar className="h-4 w-4 text-blue-600 animate-pulse" />
+                  Deadlines Calendar
+                </h4>
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsCalendarOpen(false);
+                  }}
+                  className="text-[10px] text-zinc-500 hover:text-zinc-800 bg-zinc-100/80 hover:bg-zinc-200/85 border border-zinc-300/40 px-2 py-0.5 rounded font-bold transition"
+                >
+                  Minimize
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto min-h-0">
+                <CalendarView tasks={tasks} isFloating={true} />
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between w-full h-full">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-blue-50 rounded-lg">
+                  <Calendar className="h-4 w-4 text-blue-600" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[11px] font-black text-zinc-800 uppercase tracking-wide leading-none">Deadlines Calendar</p>
+                  <p className="text-[10px] text-zinc-500 font-bold mt-0.5 leading-none">Interactive Sticky Note</p>
+                </div>
+              </div>
+              <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-md hover:bg-blue-700 transition">
+                Open
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <footer className="py-6 text-center text-xs text-zinc-500 border-t border-zinc-200 bg-white">
