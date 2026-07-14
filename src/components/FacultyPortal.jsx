@@ -393,13 +393,11 @@ export default function FacultyPortal({ user }) {
         </button>
       </div>
 
-      {/* Hidden trigger for calendar modal */}
-      <button id="floating-calendar-trigger" onClick={() => setActiveModal('calendar')} className="hidden" />
 
       {/* Active Tasks Modal */}
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 md:p-6 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full h-[80vh] max-h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 md:px-6 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />
@@ -691,7 +689,7 @@ export default function FacultyPortal({ user }) {
 
       {/* Alerts Modal */}
       {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-lg w-full animate-scaleIn text-zinc-900 text-center">
             <h3 className="text-xl font-bold flex items-center gap-2 justify-center text-red-600 mb-2">
               <Bell className="h-6 w-6" />
@@ -749,9 +747,9 @@ export default function FacultyPortal({ user }) {
 
       {/* Completed Archive Modal */}
       {activeModal === 'archive' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-5xl w-full animate-scaleIn text-zinc-900">
-            <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
+            <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-purple-750">
                   <Archive className="h-6 w-6" />
@@ -765,10 +763,10 @@ export default function FacultyPortal({ user }) {
                 onClick={() => setActiveModal(null)}
                 className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
               >
-                Close Archive
+                Close
               </button>
             </div>
-
+            <div className="flex-1 overflow-y-auto p-6">
             {loadingArchive ? (
               <div className="text-center py-20">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent mx-auto"></div>
@@ -832,13 +830,14 @@ export default function FacultyPortal({ user }) {
                 </table>
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Nominate Task Modal */}
       {activeModal === 'nominate' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-xl w-full animate-scaleIn text-zinc-900">
             <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
@@ -958,7 +957,7 @@ export default function FacultyPortal({ user }) {
 
       {/* Edit/Update Progress Modal Overlay */}
       {editingTask && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/55 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
           <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
             <h3 className="text-lg font-bold text-zinc-900 mb-2">Update Accomplishment</h3>
             <p className="text-zinc-500 text-xs mb-4">Task: <span className="text-zinc-950 font-bold">{editingTask.taskDescription}</span></p>

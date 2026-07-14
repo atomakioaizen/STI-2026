@@ -586,22 +586,19 @@ export default function AdminPortal({ user }) {
 
       </div>
 
-      {/* Hidden trigger for calendar modal */}
-      <button id="floating-calendar-trigger" onClick={() => setActiveModal('calendar')} className="hidden" />
-
       {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
 
       {/* Audit Logs Insight Modal */}
       {activeModal === 'insights' && user.role === 'SCHOOL_ADMIN' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
           <InsightsView onClose={() => setActiveModal(null)} />
         </div>
       )}
 
       {/* Task nominations modal */}
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 md:p-6 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full h-[80vh] max-h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 md:px-6 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />
@@ -818,8 +815,8 @@ export default function AdminPortal({ user }) {
 
       {/* Users account modal */}
       {activeModal === 'users' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-4xl w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-4xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <Users className="h-5 w-5 text-green-600" />
@@ -971,8 +968,8 @@ export default function AdminPortal({ user }) {
 
       {/* Departments view modal */}
       {activeModal === 'departments' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-lg w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-lg w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <Settings className="h-5 w-5 text-zinc-700" />
@@ -1053,8 +1050,8 @@ export default function AdminPortal({ user }) {
 
       {/* Archive Modal */}
       {activeModal === 'archive' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-purple-800">
@@ -1139,7 +1136,7 @@ export default function AdminPortal({ user }) {
 
       {/* Nominate / Assign task modal */}
       {activeModal === 'nominate' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-xl w-full animate-scaleIn text-zinc-900">
             <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
