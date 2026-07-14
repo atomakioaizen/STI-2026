@@ -172,56 +172,16 @@ export default function LoginPage() {
           {/* Quick Login Credentials */}
           <div className="mt-8 border-t border-white/5 pt-6">
             <p className="text-center text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-3">
-              Quick Autofill — All passwords: <span className="text-yellow-400">password123</span>
+              Quick Autofill — Password: <span className="text-yellow-400">password123</span>
             </p>
-            <div className="grid grid-cols-2 gap-2 text-xxs font-medium">
+            <div className="flex justify-center text-xs font-medium">
               <button
                 type="button"
                 onClick={() => handleQuickLogin('admin', 'password123')}
-                className="rounded-lg bg-purple-950/20 border border-purple-500/20 py-2 px-2.5 text-purple-400 hover:bg-purple-950/40 hover:border-purple-500/40 text-left transition"
+                className="w-full rounded-lg bg-purple-950/20 border border-purple-500/20 py-2.5 px-4 text-purple-400 hover:bg-purple-950/40 hover:border-purple-500/40 text-center transition"
               >
-                <div className="font-bold text-zinc-300">School Admin</div>
-                <div className="text-[10px] opacity-75">admin</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('principal', 'password123')}
-                className="rounded-lg bg-red-950/20 border border-red-500/20 py-2 px-2.5 text-red-400 hover:bg-red-950/40 hover:border-red-500/40 text-left transition"
-              >
-                <div className="font-bold text-zinc-300">Principal</div>
-                <div className="text-[10px] opacity-75">principal</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('fcastillo', 'password123')}
-                className="rounded-lg bg-blue-950/20 border border-blue-500/20 py-2 px-2.5 text-blue-400 hover:bg-blue-950/40 hover:border-blue-500/40 text-left transition"
-              >
-                <div className="font-bold text-zinc-300">Head BSIT</div>
-                <div className="text-[10px] opacity-75">fcastillo</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('gespiritu', 'password123')}
-                className="rounded-lg bg-blue-950/20 border border-blue-500/20 py-2 px-2.5 text-blue-400 hover:bg-blue-950/40 hover:border-blue-500/40 text-left transition"
-              >
-                <div className="font-bold text-zinc-300">Head BSTM</div>
-                <div className="text-[10px] opacity-75">gespiritu</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('msantos', 'password123')}
-                className="rounded-lg bg-green-950/20 border border-green-500/20 py-2 px-2.5 text-green-400 hover:bg-green-950/40 hover:border-green-500/40 text-left transition"
-              >
-                <div className="font-bold text-zinc-300">Faculty BSIT</div>
-                <div className="text-[10px] opacity-75">msantos</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('rmagtanggol', 'password123')}
-                className="rounded-lg bg-amber-950/20 border border-amber-500/20 py-2 px-2.5 text-amber-400 hover:bg-amber-950/40 hover:border-amber-500/40 text-left transition"
-              >
-                <div className="font-bold text-zinc-300">Admin Staff</div>
-                <div className="text-[10px] opacity-75">rmagtanggol</div>
+                <div className="font-bold text-zinc-300">Default School Admin Account</div>
+                <div className="text-xs opacity-75">Username: admin</div>
               </button>
             </div>
           </div>
