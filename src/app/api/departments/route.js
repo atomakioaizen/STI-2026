@@ -83,3 +83,38 @@ export async function POST(request) {
     );
   }
 }
+
+export async function DELETE(request) {
+  try {
+    const user = await getSessionUser();
+    if (!user || user.role !== 'SCHOOL_ADMIN') {
+      return NextResponse.json({ error: 'Forbidden — School Admin privileges required' }, { status: 403 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const idParam = searchParams.get('id');
+    if (!idParam) {
+      return NextResponse.json({ error: 'Department ID is required' }, { status: 400 });
+    }
+
+    const deptId = parseInt(idParam, 10);
+    if (isNaN(deptId)) {
+      return NextResponse.json({ error: 'Invalid department ID' }, { status: 400 });
+    }
+
+    // Set users belonging to this department to NULL departmentId
+    await prisma.user.updateMany({
+      where: { departmentId: deptId },
+      data: { departmentId: null }
+    });
+
+    await prisma.department.delete({
+      where: { id: deptId }
+    });
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Delete department error:', error);
+    return NextResponse.json({ error: 'Failed to delete department' }, { status: 500 });
+  }
+}

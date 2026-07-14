@@ -24,6 +24,8 @@ export default function FacultyPortal({ user }) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [priorityFilter, setPriorityFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortField, setSortField] = useState('targetDate');
+  const [sortDirection, setSortDirection] = useState('asc');
 
   // Nomination Form State
   const [category, setCategory] = useState('');
@@ -330,7 +332,7 @@ export default function FacultyPortal({ user }) {
         </button>
         {/* Card 2: Calendar */}
         <button
-          onClick={() => document.getElementById('deadline-calendar')?.scrollIntoView({ behavior: 'smooth' })}
+          onClick={() => document.getElementById('floating-calendar-trigger')?.click()}
           className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
         >
           <div className="p-3 bg-yellow-50 rounded-xl group-hover:bg-yellow-100 transition inline-block">
@@ -343,7 +345,7 @@ export default function FacultyPortal({ user }) {
             Check all deadlines scheduled on a monthly map. Don't miss dates!
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-yellow-600">
-            Scroll to Calendar ↓
+            Open Interactive Calendar →
           </span>
         </button>
 
@@ -391,16 +393,14 @@ export default function FacultyPortal({ user }) {
         </button>
       </div>
 
-      {/* Persistent Deadline Calendar */}
-      <div id="deadline-calendar" className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
-        <CalendarView tasks={tasks.concat(archivedTasks)} />
-      </div>
+      {/* Hidden trigger for calendar modal */}
+      <button id="floating-calendar-trigger" onClick={() => setActiveModal('calendar')} className="hidden" />
 
       {/* Active Tasks Modal */}
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-6xl w-full my-8 animate-scaleIn text-zinc-900">
-            <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full h-[85vh] flex flex-col animate-scaleIn text-zinc-900 overflow-hidden">
+            <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />
                 My Active Tasks & Nominations
@@ -425,86 +425,144 @@ export default function FacultyPortal({ user }) {
                   onClick={() => setActiveModal(null)}
                   className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
                 >
-                  Close List
+                  Close
                 </button>
               </div>
             </div>
 
-            {/* Filter Bar */}
-            <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-50 p-4 rounded-xl border border-zinc-100">
-              <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3 w-full justify-between">
-                <div className="relative flex-1 min-w-[200px]">
-                  <input
-                    type="text"
-                    placeholder="Search category, task description..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs focus:border-zinc-300 focus:outline-none"
-                  />
-                  <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
-                </div>
+            <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              {/* Filter Bar */}
+              <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-50 p-4 rounded-xl border border-zinc-100">
+                <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3 w-full justify-between">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <input
+                      type="text"
+                      placeholder="Search category, task description..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-white py-1.5 pl-8 pr-3 text-xs focus:border-zinc-300 focus:outline-none"
+                    />
+                    <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-zinc-400" />
+                  </div>
 
-                <div className="flex gap-2">
-                  <select
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
-                  >
-                    <option value="All">All Statuses</option>
-                    <option value="Not Started">Not Started</option>
-                    <option value="Ongoing">Ongoing</option>
-                    <option value="Awaiting Approval">Awaiting Approval</option>
-                    <option value="Awaiting Deletion">Awaiting Deletion</option>
-                    <option value="Delayed">Delayed</option>
-                  </select>
+                  <div className="flex gap-2">
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="Not Started">Not Started</option>
+                      <option value="Ongoing">Ongoing</option>
+                      <option value="Awaiting Approval">Awaiting Approval</option>
+                      <option value="Awaiting Deletion">Awaiting Deletion</option>
+                      <option value="Delayed">Delayed</option>
+                    </select>
 
-                  <select
-                    value={priorityFilter}
-                    onChange={(e) => setPriorityFilter(e.target.value)}
-                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
-                  >
-                    <option value="All">All Priorities</option>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
+                    <select
+                      value={priorityFilter}
+                      onChange={(e) => setPriorityFilter(e.target.value)}
+                      className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
+                    >
+                      <option value="All">All Priorities</option>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
 
-                  <button
-                    type="button"
-                    onClick={fetchTasks}
-                    className="p-2 border border-zinc-200 bg-white hover:bg-zinc-50 rounded-lg transition active:scale-95"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5 text-zinc-600" />
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Table Area */}
-            {loading ? (
-              <div className="text-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent mx-auto"></div>
+                    <button
+                      type="button"
+                      onClick={fetchTasks}
+                      className="p-2 border border-zinc-200 bg-white hover:bg-zinc-50 rounded-lg transition active:scale-95"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 text-zinc-600" />
+                    </button>
+                  </div>
+                </form>
               </div>
-            ) : tasks.length === 0 ? (
-              <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
-                <p className="text-sm font-semibold">No active tasks found.</p>
+
+              {/* Sorting Bar */}
+              <div className="flex items-center gap-2 mb-3 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 text-xs text-blue-900">
+                <span className="font-bold">Sort Tasks By:</span>
+                <button
+                  onClick={() => {
+                    if (sortField === 'targetDate') {
+                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortField('targetDate');
+                      setSortDirection('asc');
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded font-bold border transition ${sortField === 'targetDate' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'}`}
+                >
+                  📅 Deadline Date {sortField === 'targetDate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </button>
+                <button
+                  onClick={() => {
+                    if (sortField === 'entryDate') {
+                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortField('entryDate');
+                      setSortDirection('asc');
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded font-bold border transition ${sortField === 'entryDate' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'}`}
+                >
+                  📅 Entry Date {sortField === 'entryDate' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </button>
+                <button
+                  onClick={() => {
+                    if (sortField === 'priority') {
+                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortField('priority');
+                      setSortDirection('asc');
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded font-bold border transition ${sortField === 'priority' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'}`}
+                >
+                  ⚡ Priority {sortField === 'priority' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </button>
               </div>
-            ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-xl">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
-                    <tr>
-                      <th className="py-3 px-4">Task Details</th>
-                      <th className="py-3 px-4">Nominated</th>
-                      <th className="py-3 px-4">Deadline</th>
-                      <th className="py-3 px-4">Priority</th>
-                      <th className="py-3 px-4">Status & Progress</th>
-                      <th className="py-3 px-4">Evidence</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-250">
-                    {tasks.map((task, idx) => {
+
+              {/* Table Area */}
+              {loading ? (
+                <div className="text-center py-20">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent mx-auto"></div>
+                </div>
+              ) : tasks.length === 0 ? (
+                <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
+                  <p className="text-sm font-semibold">No active tasks found.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="py-3 px-4">Task Details</th>
+                        <th className="py-3 px-4">Nominated</th>
+                        <th className="py-3 px-4">Deadline</th>
+                        <th className="py-3 px-4">Priority</th>
+                        <th className="py-3 px-4">Status & Progress</th>
+                        <th className="py-3 px-4">Evidence</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-250">
+                      {[...tasks].sort((a, b) => {
+                        let aVal = a[sortField];
+                        let bVal = b[sortField];
+                        if (sortField === 'targetDate' || sortField === 'entryDate') {
+                          aVal = aVal ? new Date(aVal).getTime() : Infinity;
+                          bVal = bVal ? new Date(bVal).getTime() : Infinity;
+                        } else {
+                          aVal = aVal ? String(aVal).toLowerCase() : '';
+                          bVal = bVal ? String(bVal).toLowerCase() : '';
+                        }
+                        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+                        return 0;
+                      }).map((task, idx) => {
                       const isDelayed = task.status === 'Delayed';
                       const isCompleted = task.status === 'Completed';
 
@@ -627,6 +685,7 @@ export default function FacultyPortal({ user }) {
             )}
           </div>
         </div>
+      </div>
       )}
 
 

@@ -332,6 +332,8 @@ export async function POST(request) {
       initialProgress = 0;
     }
 
+    const isArchived = (status === 'Completed');
+
     const task = await prisma.task.create({
       data: {
         entryDate: new Date(),
@@ -343,6 +345,7 @@ export async function POST(request) {
         progress: initialProgress,
         remarks: remarks ? remarks.trim() : '',
         evidenceLink: evidenceLink ? evidenceLink.trim() : '',
+        archived: isArchived,
         userId: targetOwnerId
       },
       include: {

@@ -7,6 +7,7 @@ import AdminPortal from '@/components/AdminPortal';
 import ProgramHeadPortal from '@/components/ProgramHeadPortal';
 import FacultyPortal from '@/components/FacultyPortal';
 import Leaderboard from '@/components/Leaderboard';
+import CalendarView from '@/components/CalendarView';
 
 export default function DashboardClient({ user }) {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function DashboardClient({ user }) {
   const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'leaderboard'
   const [tasks, setTasks] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   useEffect(() => {
     async function getTasks() {
@@ -217,6 +219,35 @@ export default function DashboardClient({ user }) {
           </>
         )}
       </main>
+
+      {/* Floating Calendar Widget */}
+      <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        {isCalendarOpen && (
+          <div className="bg-white/95 border border-zinc-200 shadow-2xl rounded-2xl p-4 mb-3 w-[360px] sm:w-[380px] max-h-[500px] overflow-y-auto animate-scaleIn">
+            <div className="flex justify-between items-center mb-2 pb-2 border-b border-zinc-100">
+              <h4 className="text-xs font-black text-zinc-800 flex items-center gap-1.5 uppercase tracking-wide">
+                <Calendar className="h-4 w-4 text-blue-600 animate-pulse" />
+                Deadlines Calendar
+              </h4>
+              <button 
+                onClick={() => setIsCalendarOpen(false)}
+                className="text-[10px] text-zinc-400 hover:text-zinc-700 bg-zinc-50 border border-zinc-200 px-2 py-0.5 rounded font-bold transition"
+              >
+                Close
+              </button>
+            </div>
+            <CalendarView tasks={tasks} isFloating={true} />
+          </div>
+        )}
+        <button
+          id="floating-calendar-trigger"
+          onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-2xl hover:bg-blue-700 active:scale-95 transition-all duration-200 border-2 border-white focus:outline-none"
+          title="Interactive Deadlines Calendar"
+        >
+          <Calendar className="h-6 w-6" />
+        </button>
+      </div>
 
       <footer className="py-6 text-center text-xs text-zinc-500 border-t border-zinc-200 bg-white">
         <p>© 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.</p>

@@ -55,19 +55,38 @@ export async function GET(request) {
 
     const { searchParams } = new URL(request.url);
     const monthParam = searchParams.get('month'); // YYYY-MM
+    const timeframe = searchParams.get('timeframe') || 'monthly'; // weekly | monthly | yearly
 
     // Build date range
     let startDate, endDate, selectedMonth;
-    if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
-      const [y, m] = monthParam.split('-').map(Number);
-      startDate = new Date(y, m - 1, 1, 0, 0, 0);
-      endDate   = new Date(y, m, 0, 23, 59, 59);
-      selectedMonth = monthParam;
-    } else {
-      const now = new Date();
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      endDate   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+    const now = new Date();
+
+    if (timeframe === 'weekly') {
+      // Current ISO week: Monday to Sunday
+      const day = now.getDay() || 7; // treat Sunday as 7
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - day + 1);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(startDate);
+      endDate.setDate(startDate.getDate() + 6);
+      endDate.setHours(23, 59, 59, 999);
       selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    } else if (timeframe === 'yearly') {
+      startDate = new Date(now.getFullYear(), 0, 1, 0, 0, 0);
+      endDate   = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+      selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    } else {
+      // monthly (default)
+      if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+        const [y, m] = monthParam.split('-').map(Number);
+        startDate = new Date(y, m - 1, 1, 0, 0, 0);
+        endDate   = new Date(y, m, 0, 23, 59, 59);
+        selectedMonth = monthParam;
+      } else {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+        endDate   = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+        selectedMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      }
     }
 
     // Get Completed tasks by FACULTY_STAFF only (these are the competitors)

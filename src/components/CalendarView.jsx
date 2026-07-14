@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 
-export default function CalendarView({ tasks, onClose }) {
+export default function CalendarView({ tasks, onClose, isFloating = false }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDayTasks, setSelectedDayTasks] = useState(null);
   const [selectedDayStr, setSelectedDayStr] = useState('');
@@ -74,26 +74,28 @@ export default function CalendarView({ tasks, onClose }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-4xl w-full mx-auto animate-scaleIn text-zinc-900">
+    <div className={`${isFloating ? 'bg-transparent p-0 border-0 shadow-none' : 'bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6'} w-full text-zinc-900`}>
       {/* Header */}
-      <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
-        <h3 className="text-xl font-bold flex items-center gap-2 text-zinc-800">
-          <CalendarIcon className="h-6 w-6 text-blue-600" />
-          Task Deadline Calendar
-        </h3>
-        {onClose && (
-          <button 
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
-          >
-            Close Calendar
-          </button>
-        )}
-      </div>
+      {!isFloating && (
+        <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
+          <h3 className="text-xl font-bold flex items-center gap-2 text-zinc-800">
+            <CalendarIcon className="h-6 w-6 text-blue-600" />
+            Task Deadline Calendar
+          </h3>
+          {onClose && (
+            <button 
+              onClick={onClose}
+              className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 px-3 py-1.5 rounded-lg text-xs font-semibold transition"
+            >
+              Close Calendar
+            </button>
+          )}
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+      <div className={`grid grid-cols-1 ${isFloating ? 'gap-4' : 'md:grid-cols-5 gap-6'}`}>
         {/* Calendar Grid */}
-        <div className="md:col-span-3">
+        <div className={`${isFloating ? '' : 'md:col-span-3'}`}>
           <div className="flex justify-between items-center mb-4">
             <span className="font-extrabold text-lg text-zinc-800">
               {monthNames[month]} {year}
@@ -170,8 +172,8 @@ export default function CalendarView({ tasks, onClose }) {
         </div>
 
         {/* Selected Day Details Panel */}
-        <div className="md:col-span-2 border-t md:border-t-0 md:border-l border-zinc-100 md:pl-6 pt-4 md:pt-0">
-          <h4 className="font-bold text-zinc-700 text-sm tracking-wide mb-3 uppercase">
+        <div className={isFloating ? "border-t border-zinc-150 pt-3" : "md:col-span-2 border-t md:border-t-0 md:border-l border-zinc-100 md:pl-6 pt-4 md:pt-0"}>
+          <h4 className="font-bold text-zinc-700 text-xs tracking-wide mb-2 uppercase">
             Deadlines on this Day
           </h4>
           
