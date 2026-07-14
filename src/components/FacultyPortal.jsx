@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, AlertTriangle, TrendingUp, 
   PlusCircle, Calendar, List, Search, Plus, 
-  Trash2, ExternalLink, RefreshCw, Archive, Bell
+  Trash2, ExternalLink, RefreshCw, Archive, Bell, FileSpreadsheet
 } from 'lucide-react';
 import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
+import { exportTasksToExcel } from '@/lib/reports';
 
 export default function FacultyPortal({ user }) {
   const [tasks, setTasks] = useState([]);
@@ -84,6 +85,31 @@ export default function FacultyPortal({ user }) {
       setLoadingArchive(false);
     }
   }
+
+  const handleExport = (timeframe) => {
+    const now = new Date();
+    let filtered = [...tasks, ...archivedTasks];
+    let title = `${user.name} Tasks Report`;
+
+    if (timeframe === 'weekly') {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(now.getDate() - 7);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= oneWeekAgo);
+      title = `${user.name} Weekly Tasks Report`;
+    } else if (timeframe === 'monthly') {
+      const oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(now.getMonth() - 1);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= oneMonthAgo);
+      title = `${user.name} Monthly Tasks Report`;
+    } else if (timeframe === 'yearly') {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(now.getFullYear() - 1);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= oneYearAgo);
+      title = `${user.name} Yearly Tasks Report`;
+    }
+
+    exportTasksToExcel(filtered, title);
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -302,10 +328,9 @@ export default function FacultyPortal({ user }) {
             Open List →
           </span>
         </button>
-
         {/* Card 2: Calendar */}
         <button
-          onClick={() => setActiveModal('calendar')}
+          onClick={() => document.getElementById('deadline-calendar')?.scrollIntoView({ behavior: 'smooth' })}
           className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
         >
           <div className="p-3 bg-yellow-50 rounded-xl group-hover:bg-yellow-100 transition inline-block">
@@ -318,7 +343,7 @@ export default function FacultyPortal({ user }) {
             Check all deadlines scheduled on a monthly map. Don't miss dates!
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-yellow-600">
-            View Calendar →
+            Scroll to Calendar ↓
           </span>
         </button>
 
@@ -364,11 +389,12 @@ export default function FacultyPortal({ user }) {
             View Archive →
           </span>
         </button>
-
       </div>
 
-
-      {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
+      {/* Persistent Deadline Calendar */}
+      <div id="deadline-calendar" className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+        <CalendarView tasks={tasks.concat(archivedTasks)} />
+      </div>
 
       {/* Active Tasks Modal */}
       {activeModal === 'tasks' && (
@@ -379,12 +405,29 @@ export default function FacultyPortal({ user }) {
                 <List className="h-5 w-5 text-blue-600" />
                 My Active Tasks & Nominations
               </h3>
-              <button 
-                onClick={() => setActiveModal(null)}
-                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
-              >
-                Close List
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleExport(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-705 focus:outline-none cursor-pointer"
+                >
+                  <option value="">📊 Export Excel Report</option>
+                  <option value="weekly">Weekly Report</option>
+                  <option value="monthly">Monthly Report</option>
+                  <option value="yearly">Yearly Report</option>
+                  <option value="all">All Tasks</option>
+                </select>
+                <button 
+                  onClick={() => setActiveModal(null)}
+                  className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                >
+                  Close List
+                </button>
+              </div>
             </div>
 
             {/* Filter Bar */}
@@ -460,24 +503,24 @@ export default function FacultyPortal({ user }) {
                       <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {tasks.map((task) => {
+                  <tbody className="divide-y divide-zinc-250">
+                    {tasks.map((task, idx) => {
                       const isDelayed = task.status === 'Delayed';
                       const isCompleted = task.status === 'Completed';
 
                       let statusColor = 'text-yellow-800 bg-yellow-100 border-yellow-200';
                       if (isCompleted) statusColor = 'text-green-800 bg-green-100 border-green-200';
                       if (isDelayed) statusColor = 'text-red-800 bg-red-100 border-red-200';
-                      if (task.status === 'Not Started') statusColor = 'text-zinc-600 bg-zinc-100 border-zinc-200';
+                      if (task.status === 'Not Started') statusColor = 'text-zinc-650 bg-zinc-100 border-zinc-200';
                       if (task.status === 'Awaiting Approval') statusColor = 'text-purple-800 bg-purple-100 border-purple-200';
                       if (task.status === 'Awaiting Deletion') statusColor = 'text-orange-800 bg-orange-100 border-orange-200';
 
                       let prioColor = 'text-zinc-700 bg-zinc-100';
                       if (task.priority === 'High') prioColor = 'text-red-700 bg-red-100';
-                      if (task.priority === 'Medium') prioColor = 'text-yellow-700 bg-yellow-100';
+                      if (task.priority === 'Medium') prioColor = 'text-yellow-750 bg-yellow-100';
 
                       return (
-                        <tr key={task.id} className="hover:bg-zinc-50 transition group">
+                        <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition group border-b border-zinc-200`}>
                           <td className="py-4 px-4 max-w-sm">
                             <div>
                               <span className="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
@@ -586,15 +629,6 @@ export default function FacultyPortal({ user }) {
         </div>
       )}
 
-      {/* Calendar Modal */}
-      {activeModal === 'calendar' && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <CalendarView 
-            tasks={tasks.concat(archivedTasks)} 
-            onClose={() => setActiveModal(null)} 
-          />
-        </div>
-      )}
 
       {/* Alerts Modal */}
       {activeModal === 'notifications' && (
@@ -695,9 +729,9 @@ export default function FacultyPortal({ user }) {
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {archivedTasks.map(t => (
-                      <tr key={t.id} className="hover:bg-zinc-50 transition">
+                  <tbody className="divide-y divide-zinc-200">
+                    {archivedTasks.map((t, idx) => (
+                      <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition`}>
                         <td className="py-3 px-4">
                           <div>
                             <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">

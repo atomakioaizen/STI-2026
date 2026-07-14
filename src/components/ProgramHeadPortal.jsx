@@ -4,10 +4,11 @@ import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, AlertTriangle, TrendingUp, 
   List, Search, RefreshCw, Eye, Edit2, Users, FileText,
-  PlusCircle, Calendar, Plus, Trash2, ExternalLink, Archive, Bell
+  PlusCircle, Calendar, Plus, Trash2, ExternalLink, Archive, Bell, FileSpreadsheet
 } from 'lucide-react';
 import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
+import { exportTasksToExcel } from '@/lib/reports';
 
 export default function ProgramHeadPortal({ user }) {
   const [tasks, setTasks] = useState([]);
@@ -132,6 +133,27 @@ export default function ProgramHeadPortal({ user }) {
       console.error('Error fetching faculty list:', err);
     }
   }
+
+  const handleExport = (timeframe) => {
+    const now = new Date();
+    let filtered = [...tasks, ...archivedTasks];
+    let title = `${user.departmentName || user.name} Department Tasks Report`;
+
+    if (timeframe === 'weekly') {
+      const ago = new Date(); ago.setDate(now.getDate() - 7);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
+      title += ' - Weekly';
+    } else if (timeframe === 'monthly') {
+      const ago = new Date(); ago.setMonth(now.getMonth() - 1);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
+      title += ' - Monthly';
+    } else if (timeframe === 'yearly') {
+      const ago = new Date(); ago.setFullYear(now.getFullYear() - 1);
+      filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
+      title += ' - Yearly';
+    }
+    exportTasksToExcel(filtered, title);
+  };
 
   const handleSearchSubmit = (e) => {
     e.preventDefault();
@@ -395,7 +417,7 @@ export default function ProgramHeadPortal({ user }) {
 
         {/* Card 3: Calendar */}
         <button
-          onClick={() => setActiveModal('calendar')}
+          onClick={() => document.getElementById('deadline-calendar')?.scrollIntoView({ behavior: 'smooth' })}
           className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
         >
           <div className="p-3 bg-yellow-50 rounded-xl group-hover:bg-yellow-100 transition inline-block">
@@ -408,7 +430,7 @@ export default function ProgramHeadPortal({ user }) {
             Visual calendar of all deadlines for you and your faculty.
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-yellow-600">
-            View Calendar →
+            Scroll to Calendar ↓
           </span>
         </button>
 
@@ -457,6 +479,10 @@ export default function ProgramHeadPortal({ user }) {
 
       </div>
 
+      {/* Persistent Deadline Calendar */}
+      <div id="deadline-calendar" className="bg-white border border-zinc-200 rounded-2xl p-6 shadow-sm">
+        <CalendarView tasks={tasks.concat(archivedTasks)} />
+      </div>
 
       {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
 
@@ -469,12 +495,24 @@ export default function ProgramHeadPortal({ user }) {
                 <Users className="h-5 w-5 text-blue-600" />
                 Faculty Deliverables & Statuses
               </h3>
-              <button 
-                onClick={() => setActiveModal(null)}
-                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
-              >
-                Close List
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  onChange={(e) => { if (e.target.value) { handleExport(e.target.value); e.target.value = ''; } }}
+                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer"
+                >
+                  <option value="">📊 Export Excel Report</option>
+                  <option value="weekly">Weekly Report</option>
+                  <option value="monthly">Monthly Report</option>
+                  <option value="yearly">Yearly Report</option>
+                  <option value="all">All Tasks</option>
+                </select>
+                <button 
+                  onClick={() => setActiveModal(null)}
+                  className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
             {/* Filter controls */}
@@ -549,8 +587,8 @@ export default function ProgramHeadPortal({ user }) {
                       <th className="py-3 px-4 text-right">Review Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-100">
-                    {facultyTasks.map(task => {
+                  <tbody className="divide-y divide-zinc-200">
+                    {facultyTasks.map((task, idx) => {
                       const isDelayed = task.status === 'Delayed';
                       const isCompleted = task.status === 'Completed';
 
@@ -566,7 +604,7 @@ export default function ProgramHeadPortal({ user }) {
                       if (task.priority === 'Medium') prioColor = 'text-yellow-700 bg-yellow-100';
 
                       return (
-                        <tr key={task.id} className="hover:bg-zinc-50 transition group">
+                        <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition group border-b border-zinc-200`}>
                           <td className="py-4 px-4">
                             <div>
                               <p className="font-bold text-zinc-800">{task.user?.name}</p>
