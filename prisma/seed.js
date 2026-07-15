@@ -5,24 +5,9 @@
 
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
-const { PrismaBetterSqlite3 } = require('@prisma/adapter-better-sqlite3');
-const { PrismaPg } = require('@prisma/adapter-pg');
-const pg = require('pg');
 const bcrypt = require('bcryptjs');
 
-function createPrismaClient() {
-  const dbUrl = process.env.DATABASE_URL || 'file:./dev.db';
-  if (dbUrl.startsWith('postgresql') || dbUrl.startsWith('postgres')) {
-    const pool = new pg.Pool({ connectionString: dbUrl });
-    const adapter = new PrismaPg(pool);
-    return new PrismaClient({ adapter });
-  } else {
-    const adapter = new PrismaBetterSqlite3({ url: dbUrl });
-    return new PrismaClient({ adapter });
-  }
-}
-
-const prisma = createPrismaClient();
+const prisma = new PrismaClient();
 
 async function main() {
   console.log('🗑  Wiping all existing data...');
