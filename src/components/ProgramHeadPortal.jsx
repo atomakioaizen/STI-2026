@@ -1203,7 +1203,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
                   className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none focus:bg-white"
                 >
                   <option value="">Myself (Self-Nomination)</option>
-                  {faculty.map(f => (
+                  {facultyList.map(f => (
                     <option key={f.id} value={f.id}>{f.name} (Faculty Staff)</option>
                   ))}
                 </select>
