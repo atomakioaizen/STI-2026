@@ -36,6 +36,10 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
   const [reviewStatus, setReviewStatus] = useState('Ongoing');
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [customDialog, setCustomDialog] = useState(null);
+  const [assignToUserId, setAssignToUserId] = useState('');
+  const [forcingTaskId, setForcingTaskId] = useState(null);
+  const [forceNoteInput, setForceNoteInput] = useState('');
 
   // Self-Nomination Form States (for Program Head's own tasks)
   const [category, setCategory] = useState('');
