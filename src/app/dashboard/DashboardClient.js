@@ -178,7 +178,7 @@ export default function DashboardClient({ user }) {
                       </div>
                       <div className="space-y-3 max-h-64 overflow-y-auto">
                         {urgentTasks.length === 0 ? (
-                          <p className="text-xs text-zinc-500 text-center py-4">Walang urgent na deadlines o delayed tasks.</p>
+                          <p className="text-xs text-zinc-500 text-center py-4">No urgent deadlines or delayed tasks.</p>
                         ) : (
                           urgentTasks.map(t => {
                             const isDelayed = t.status === 'Delayed';

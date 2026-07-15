@@ -32,10 +32,10 @@ export default function SuperAlertModal({ tasks, onClose }) {
 
         {/* Urgent Header */}
         <h3 className="text-2xl font-black text-red-600 tracking-tight mb-2">
-          MAHALAGANG PAALALA! / URGENT WARNING!
+          IMPORTANT NOTICE / URGENT WARNING
         </h3>
         <p className="text-zinc-600 text-sm font-semibold mb-6">
-          Hindi mo pwedeng tanggihan na hindi mo napansin ang mga sumusunod na deadline. Mayroon kang mga task na delayed o malapit nang matapos ang palugit!
+          You cannot ignore the following deadlines. There are tasks that are delayed or approaching their target completion date.
         </p>
 
         {/* Task Breakdown list */}
@@ -73,7 +73,7 @@ export default function SuperAlertModal({ tasks, onClose }) {
           onClick={onClose}
           className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white font-black py-3.5 px-6 rounded-xl shadow-lg shadow-red-500/20 text-sm tracking-widest uppercase transition-all"
         >
-          Naiintindihan ko at Aayusin ko ngayon
+          I Understand and Will Take Action Now
         </button>
       </div>
     </div>
