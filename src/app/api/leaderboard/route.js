@@ -92,7 +92,6 @@ export async function GET(request) {
     // Get Completed tasks by FACULTY_STAFF only (these are the competitors)
     const tasks = await prisma.task.findMany({
       where: {
-        status: 'Completed',
         entryDate: { gte: startDate, lte: endDate },
         user: { role: 'FACULTY_STAFF' }, // Only FACULTY_STAFF compete
       },
@@ -126,31 +125,40 @@ export async function GET(request) {
           onTimeCount: 0,
           delayedCount: 0,
           noDeadlineCount: 0,
+          rejectedTasksCount: 0,
+          rejectionAttempts: 0,
           tasks: [],
         };
       }
 
-      const { score, priorityPts, timeFactor, timeliness } = computeScore(task);
+      // Add attempts to reject
+      scoreMap[uid].rejectionAttempts += task.rejectionCount || 0;
 
-      scoreMap[uid].totalScore      += score;
-      scoreMap[uid].taskCount       += 1;
-      if (task.priority === 'High')   scoreMap[uid].highCount++;
-      else if (task.priority === 'Medium') scoreMap[uid].mediumCount++;
-      else                            scoreMap[uid].lowCount++;
-      if (timeliness === 'on_time')   scoreMap[uid].onTimeCount++;
-      else if (timeliness === 'delayed') scoreMap[uid].delayedCount++;
-      else                            scoreMap[uid].noDeadlineCount++;
+      if (task.status === 'Completed') {
+        const { score, priorityPts, timeFactor, timeliness } = computeScore(task);
 
-      scoreMap[uid].tasks.push({
-        id: task.id,
-        category: task.category,
-        taskDescription: task.taskDescription,
-        priority: task.priority,
-        targetDate: task.targetDate,
-        entryDate: task.entryDate,
-        score,
-        timeliness,
-      });
+        scoreMap[uid].totalScore      += score;
+        scoreMap[uid].taskCount       += 1;
+        if (task.priority === 'High')   scoreMap[uid].highCount++;
+        else if (task.priority === 'Medium') scoreMap[uid].mediumCount++;
+        else                            scoreMap[uid].lowCount++;
+        if (timeliness === 'on_time')   scoreMap[uid].onTimeCount++;
+        else if (timeliness === 'delayed') scoreMap[uid].delayedCount++;
+        else                            scoreMap[uid].noDeadlineCount++;
+
+        scoreMap[uid].tasks.push({
+          id: task.id,
+          category: task.category,
+          taskDescription: task.taskDescription,
+          priority: task.priority,
+          targetDate: task.targetDate,
+          entryDate: task.entryDate,
+          score,
+          timeliness,
+        });
+      } else if (task.status === 'Rejected') {
+        scoreMap[uid].rejectedTasksCount += 1;
+      }
     }
 
     // Sort all FACULTY_STAFF by score

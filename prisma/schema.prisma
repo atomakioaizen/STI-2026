@@ -43,6 +43,10 @@ model Task {
   archived        Boolean   @default(false)
   userId          Int
   user            User      @relation(fields: [userId], references: [id])
+  nominatedById   Int?      // ID of the user who assigned/nominated the task
+  rejectionReason String?   // Reason provided by the assignee upon rejection
+  rejectionCount  Int       @default(0) // Count of rejection attempts for performance tracking
+  assignedNote    String?   // Note/explanation from the supervisor when pushing/forcing the task
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }

@@ -10,7 +10,7 @@ import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
 import { exportTasksToExcel } from '@/lib/reports';
 
-export default function FacultyPortal({ user }) {
+export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +26,8 @@ export default function FacultyPortal({ user }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortField, setSortField] = useState('targetDate');
   const [sortDirection, setSortDirection] = useState('asc');
+  const [archiveSortField, setArchiveSortField] = useState('updatedAt');
+  const [archiveSortDirection, setArchiveSortDirection] = useState('desc');
 
   // Nomination Form State
   const [category, setCategory] = useState('');
@@ -40,6 +42,15 @@ export default function FacultyPortal({ user }) {
 
   // Edit/Update Modal State
   const [editingTask, setEditingTask] = useState(null);
+    const [customDialog, setCustomDialog] = useState(null);
+  const [rejectingTaskId, setRejectingTaskId] = useState(null);
+  const [rejectionInputReason, setRejectionInputReason] = useState(''); // { type: 'confirm'|'alert', title: '', message: '', onConfirm: () => void }
+  const triggerConfirm = (title, message, onConfirm) => {
+    setCustomDialog({ type: 'confirm', title, message, onConfirm });
+  };
+  const triggerAlert = (title, message) => {
+    setCustomDialog({ type: 'alert', title, message });
+  };
   const [editProgress, setEditProgress] = useState(0);
   const [editRemarks, setEditRemarks] = useState('');
   const [editEvidenceLink, setEditEvidenceLink] = useState('');
@@ -189,7 +200,12 @@ export default function FacultyPortal({ user }) {
   };
 
   const handleUpdateTask = async (e) => {
-    e.preventDefault();
+      e.preventDefault();
+      triggerConfirm('Update Progress', 'Are you sure you want to save changes to this deliverable?', () => {
+        executeUpdateTask();
+      });
+    };
+    const executeUpdateTask = async () => {
     setUpdating(true);
 
     try {
@@ -216,7 +232,7 @@ export default function FacultyPortal({ user }) {
   };
 
   const handleQuickComplete = async (taskId) => {
-    if (!confirm('Request completion approval from your head?\nThis will set the task to 100% and notify your supervisor.')) return;
+    triggerConfirm('Request Completion', 'Request completion approval from your head? This will set the task to 100% and notify your supervisor.', () => { requestCompletionAction(taskId); }); return;
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -228,15 +244,78 @@ export default function FacultyPortal({ user }) {
         fetchArchivedTasks();
       } else {
         const data = await res.json();
-        alert(data.error || 'Failed to request completion.');
+        triggerAlert('Error', data.error || 'Failed to request completion.');
       }
     } catch (err) {
       console.error('Error requesting completion', err);
     }
   };
 
+  const deleteNominationAction = async (taskId) => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Awaiting Deletion' })
+        });
+        if (res.ok) {
+          fetchTasks();
+          triggerAlert('Success', 'Deletion request sent successfully.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    
+    const handleAcceptTask = async (taskId) => {
+    triggerConfirm('Accept Task', 'Do you want to accept this nominated task and add it to your active list?', async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Not Started' })
+        });
+        if (res.ok) {
+          fetchTasks();
+          triggerAlert('Task Accepted', 'Task has been successfully added to your active deliverables.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  };
+
+  const handleRejectTaskSubmit = async (e) => {
+    e.preventDefault();
+    if (!rejectionInputReason.trim()) {
+      triggerAlert('Required', 'Please provide a reason for rejection.');
+      return;
+    }
+    const tId = rejectingTaskId;
+    const reason = rejectionInputReason.trim();
+    setRejectingTaskId(null);
+    setRejectionInputReason('');
+
+    try {
+      const res = await fetch(`/api/tasks/${tId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected', rejectionReason: reason })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Rejected', 'Rejection submitted. Your supervisor has been notified.');
+      } else {
+        const data = await res.json();
+        triggerAlert('Error', data.error || 'Failed to reject task.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleRequestDeletion = async (taskId) => {
-    if (!confirm('Are you sure you want to request deletion of this task nomination?')) return;
+    triggerConfirm('Request Deletion', 'Are you sure you want to request deletion of this task nomination?', () => { deleteNominationAction(taskId); }); return;
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -275,7 +354,8 @@ export default function FacultyPortal({ user }) {
   const completedCount = archivedTasks.length;
 
   return (
-    <div className="space-y-8 animate-fadeIn text-zinc-950">
+    <>
+      <div className="space-y-8 animate-fadeIn text-zinc-950">
       
       {/* Super Warning alert popup if urgent */}
       {showSuperAlert && (
@@ -394,11 +474,84 @@ export default function FacultyPortal({ user }) {
       </div>
 
 
+      </div>
+
       {/* Active Tasks Modal */}
+      {/* Nominated Tasks alerts */}
+      {tasks.filter(t => t.status === 'Pending Acceptance').length > 0 && (
+        <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-xs">
+          <h4 className="font-extrabold text-blue-800 text-sm mb-1 uppercase tracking-wide">Nominated Tasks Awaiting Acceptance</h4>
+          <p className="text-xs text-zinc-500 mb-4 font-medium">Your supervisor has assigned the following deliverables. Please accept or reject them.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tasks.filter(t => t.status === 'Pending Acceptance').map(t => (
+              <div key={t.id} className="p-4 bg-white border border-blue-150 rounded-xl flex flex-col justify-between shadow-3xs">
+                <div>
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{t.category}</span>
+                    <span className="text-[10px] text-zinc-400 font-bold">Priority: {t.priority}</span>
+                  </div>
+                  <p className="font-bold text-zinc-900 text-sm mb-1">{t.taskDescription}</p>
+                  {t.targetDate && <p className="text-[10px] text-zinc-400 font-semibold mb-3">Deadline: {new Date(t.targetDate).toLocaleDateString()}</p>}
+                </div>
+                <div className="flex gap-2 mt-4 border-t border-zinc-50 pt-3">
+                  <button
+                    onClick={() => handleAcceptTask(t.id)}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-3 rounded-lg shadow-xs transition"
+                  >
+                    Accept
+                  </button>
+                  <button
+                    onClick={() => setRejectingTaskId(t.id)}
+                    className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs py-2 px-3 rounded-lg transition"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Reject Task Reason Modal popup */}
+      {rejectingTaskId && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
+            <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">Reject Task Nomination</h4>
+            <p className="text-xs text-zinc-500 font-medium mb-4 leading-relaxed">Providing a reason is mandatory to reject this assigned task.</p>
+            <form onSubmit={handleRejectTaskSubmit} className="space-y-4">
+              <textarea
+                value={rejectionInputReason}
+                onChange={(e) => setRejectionInputReason(e.target.value)}
+                placeholder="Reason for rejection (e.g., overlapping deadlines, resource constraints)..."
+                rows={3}
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 px-4 text-xs font-medium placeholder-zinc-400 focus:bg-white focus:outline-none resize-none"
+                required
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setRejectingTaskId(null); setRejectionInputReason(''); }}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 font-bold rounded-lg text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-red-650 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition shadow-md"
+                >
+                  Confirm Reject
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {activeModal === 'tasks' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 md:px-6 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
-            <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-zinc-200 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-blue-600" />
                 My Active Tasks & Nominations
@@ -420,7 +573,7 @@ export default function FacultyPortal({ user }) {
                   <option value="all">All Tasks</option>
                 </select>
                 <button 
-                  onClick={() => setActiveModal(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                   className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
                 >
                   Close
@@ -428,7 +581,7 @@ export default function FacultyPortal({ user }) {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 min-h-0">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
               {/* Filter Bar */}
               <div className="flex flex-wrap items-center gap-3 mb-4 bg-zinc-50 p-4 rounded-xl border border-zinc-100">
                 <form onSubmit={handleSearchSubmit} className="flex flex-wrap items-center gap-3 w-full justify-between">
@@ -614,7 +767,7 @@ export default function FacultyPortal({ user }) {
                               <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
                                 <div 
                                   className={`h-full rounded-full transition-all duration-300 ${
-                                    isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : task.status === 'Awaiting Approval' ? 'bg-purple-500' : 'bg-blue-500'
+                                    isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : task.status === 'Awaiting Approval' ? 'bg-purple-500' : 'bg-green-500'
                                   }`}
                                   style={{ width: `${task.progress}%` }}
                                 ></div>
@@ -689,8 +842,8 @@ export default function FacultyPortal({ user }) {
 
       {/* Alerts Modal */}
       {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-lg w-full animate-scaleIn text-zinc-900 text-center">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
             <h3 className="text-xl font-bold flex items-center gap-2 justify-center text-red-600 mb-2">
               <Bell className="h-6 w-6" />
               Urgent Notifications Center
@@ -698,7 +851,7 @@ export default function FacultyPortal({ user }) {
             <p className="text-xs text-zinc-500 font-semibold mb-6">
               Review task warnings and nearing deadlines. Keep details complete!
             </p>
-            <div className="text-left space-y-3 max-h-[300px] overflow-y-auto mb-6">
+            <div className="text-left space-y-3 max-h-[60vh] overflow-y-auto mb-6">
               {tasks.filter(t => t.status === 'Delayed').map(t => (
                 <div key={t.id} className="p-3 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start">
                   <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -736,7 +889,7 @@ export default function FacultyPortal({ user }) {
               )}
             </div>
             <button
-              onClick={() => setActiveModal(null)}
+              onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
               className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold py-3.5 px-6 rounded-xl border border-zinc-200 text-sm tracking-wider uppercase transition"
             >
               Close Alerts
@@ -747,8 +900,8 @@ export default function FacultyPortal({ user }) {
 
       {/* Completed Archive Modal */}
       {activeModal === 'archive' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-purple-750">
@@ -760,13 +913,13 @@ export default function FacultyPortal({ user }) {
                 </p>
               </div>
               <button 
-                onClick={() => setActiveModal(null)}
+                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                 className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
               >
                 Close
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
             {loadingArchive ? (
               <div className="text-center py-20">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent mx-auto"></div>
@@ -776,7 +929,7 @@ export default function FacultyPortal({ user }) {
                 No completed or archived tasks are present.
               </div>
             ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[350px]">
+              <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[60vh]">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                     <tr>
@@ -837,15 +990,15 @@ export default function FacultyPortal({ user }) {
 
       {/* Nominate Task Modal */}
       {activeModal === 'nominate' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-xl w-full animate-scaleIn text-zinc-900">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
                 <PlusCircle className="h-5 w-5 text-blue-600" />
                 Nominate a Task / Milestone
               </h3>
               <button 
-                onClick={() => setActiveModal(null)}
+                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                 className="text-zinc-450 hover:text-zinc-700 text-xs px-2 py-1 rounded"
               >
                 Cancel
@@ -937,7 +1090,7 @@ export default function FacultyPortal({ user }) {
               <div className="border-t border-zinc-100 pt-4 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setActiveModal(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                   className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
                 >
                   Cancel
@@ -957,8 +1110,8 @@ export default function FacultyPortal({ user }) {
 
       {/* Edit/Update Progress Modal Overlay */}
       {editingTask && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
+          <div className="w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
             <h3 className="text-lg font-bold text-zinc-900 mb-2">Update Accomplishment</h3>
             <p className="text-zinc-500 text-xs mb-4">Task: <span className="text-zinc-950 font-bold">{editingTask.taskDescription}</span></p>
 
@@ -977,7 +1130,7 @@ export default function FacultyPortal({ user }) {
                   step="5"
                   value={editProgress}
                   onChange={(e) => setEditProgress(parseInt(e.target.value, 10))}
-                  className="w-full h-1.5 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  className="w-full h-1.5 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-green-600"
                 />
                 <div className="flex justify-between text-[10px] text-zinc-400 font-bold mt-1">
                   <span>0% (Not Started)</span>
@@ -1014,7 +1167,7 @@ export default function FacultyPortal({ user }) {
               <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4">
                 <button
                   type="button"
-                  onClick={() => setEditingTask(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}
                   className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
                 >
                   Cancel
@@ -1031,7 +1184,35 @@ export default function FacultyPortal({ user }) {
           </div>
         </div>
       )}
-      
-    </div>
+      {customDialog && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
+            <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">{customDialog.title}</h4>
+            <p className="text-xs text-zinc-500 font-medium mb-6 leading-relaxed">{customDialog.message}</p>
+            <div className="flex justify-end gap-2">
+              {customDialog.type === 'confirm' && (
+                <button
+                  onClick={() => setCustomDialog(null)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 font-bold rounded-lg text-xs transition"
+                >
+                  No
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customDialog.type === 'confirm' && customDialog.onConfirm) {
+                    customDialog.onConfirm();
+                  }
+                  setCustomDialog(null);
+                }}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-lg text-xs transition shadow-md shadow-zinc-950/10"
+              >
+                {customDialog.type === 'confirm' ? 'Yes' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

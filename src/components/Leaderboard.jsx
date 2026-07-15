@@ -459,7 +459,17 @@ export default function Leaderboard({ user }) {
                                   );
                                 })}
                               </div>
-                              <div className="mt-3 flex justify-end">
+                              <div className="mt-3 flex justify-between items-center">
+                                <div className="flex gap-4 text-xs font-semibold text-zinc-500">
+                                  <div>
+                                    <span>Rejected Tasks: </span>
+                                    <span className="font-bold text-red-600">{entry.rejectedTasksCount || 0}</span>
+                                  </div>
+                                  <div>
+                                    <span>Attempts to Reject: </span>
+                                    <span className="font-bold text-zinc-700">{entry.rejectionAttempts || 0}</span>
+                                  </div>
+                                </div>
                                 <div className="rounded-lg border border-zinc-200 bg-white px-4 py-2 text-sm shadow-2xs">
                                   <span className="text-zinc-400 font-semibold">Total: </span>
                                   <span className="font-black text-blue-600 text-lg">{entry.totalScore} pts</span>

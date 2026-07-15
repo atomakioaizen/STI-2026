@@ -325,10 +325,15 @@ export async function POST(request) {
     let initialProgress = progress ? parseInt(progress, 10) : 0;
     
     if (isAuthority) {
-      if (initialProgress > 0 && initialProgress < 100) {
-        status = 'Ongoing';
-      } else if (initialProgress === 100) {
-        status = 'Completed';
+      if (targetOwnerId !== user.userId) {
+        status = 'Pending Acceptance';
+        initialProgress = 0;
+      } else {
+        if (initialProgress > 0 && initialProgress < 100) {
+          status = 'Ongoing';
+        } else if (initialProgress === 100) {
+          status = 'Completed';
+        }
       }
     } else {
       // Subordinate nominating a task

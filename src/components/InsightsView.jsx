@@ -51,7 +51,7 @@ export default function InsightsView({ onClose }) {
   });
 
   return (
-    <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-5xl w-full mx-auto animate-scaleIn text-zinc-900">
+    <div className="flex flex-col h-full w-full text-zinc-900">
       <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
         <div>
           <h3 className="text-xl font-bold flex items-center gap-2 text-zinc-800">
@@ -93,7 +93,7 @@ export default function InsightsView({ onClose }) {
       </div>
 
       {/* Logs Table */}
-      <div className="border border-zinc-100 rounded-xl overflow-hidden shadow-inner max-h-[400px] overflow-y-auto">
+      <div className="border border-zinc-100 rounded-xl overflow-hidden shadow-inner max-h-[60vh] overflow-y-auto flex-1 border border-zinc-100 rounded-xl">
         {loading ? (
           <div className="p-8 text-center text-zinc-500">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-300 border-t-purple-600 mx-auto mb-2"></div>

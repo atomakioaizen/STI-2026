@@ -64,6 +64,9 @@ export async function PATCH(request, { params }) {
     if (updates.targetDate !== undefined) {
       data.targetDate = updates.targetDate ? new Date(updates.targetDate) : null;
     }
+    if (updates.rejectionReason !== undefined) data.rejectionReason = updates.rejectionReason ? updates.rejectionReason.trim() : null;
+    if (updates.assignedNote !== undefined) data.assignedNote = updates.assignedNote ? updates.assignedNote.trim() : null;
+    if (updates.rejectionCount !== undefined) data.rejectionCount = parseInt(updates.rejectionCount, 10);
 
     // Determine supervising authority
     let isAuthority = false;
@@ -85,14 +88,22 @@ export async function PATCH(request, { params }) {
 
     // Progress and Status flow control
     if (!isAuthority) {
-      // Subordinate modifying their own task — CANNOT change status directly
-      // The ONLY allowed self-status action is requesting deletion
       if (updates.status !== undefined) {
         if (updates.status === 'Awaiting Deletion') {
-          // Allow faculty/staff to request deletion
           data.status = 'Awaiting Deletion';
+        } else if (updates.status === 'Not Started' && task.status === 'Pending Acceptance') {
+          // Accept nominated task
+          data.status = 'Not Started';
+          data.rejectionReason = null; // Clear rejection reason since it's accepted
+        } else if (updates.status === 'Rejected' && task.status === 'Pending Acceptance') {
+          // Reject nominated task
+          if (!updates.rejectionReason || !updates.rejectionReason.trim()) {
+            return NextResponse.json({ error: 'Rejection reason is mandatory.' }, { status: 400 });
+          }
+          data.status = 'Rejected';
+          data.rejectionReason = updates.rejectionReason.trim();
+          data.rejectionCount = (task.rejectionCount || 0) + 1;
         } else {
-          // ALL other status changes are blocked for subordinates
           return NextResponse.json(
             { error: 'Only your supervising authority can change the status of this task.' },
             { status: 403 }
@@ -102,24 +113,19 @@ export async function PATCH(request, { params }) {
 
       if (updates.progress !== undefined) {
         const currentStatus = task.status;
-        // Block progress updates if task is already Awaiting Deletion or Completed
-        if (currentStatus === 'Awaiting Deletion' || currentStatus === 'Completed') {
+        if (currentStatus === 'Awaiting Deletion' || currentStatus === 'Completed' || currentStatus === 'Pending Acceptance') {
           return NextResponse.json(
-            { error: 'You cannot update progress on a task that is pending deletion or already completed.' },
+            { error: 'You cannot update progress on a pending or completed task.' },
             { status: 403 }
           );
         }
         const prog = parseInt(updates.progress, 10);
         data.progress = prog;
-        // Auto-set status based on progress
         if (prog === 100) {
-          data.status = 'Awaiting Approval'; // Request completion approval
+          data.status = 'Awaiting Approval';
         } else if (prog > 0 && currentStatus === 'Ongoing') {
-          data.status = 'Ongoing'; // Stay ongoing
-        } else if (currentStatus === 'Awaiting Approval') {
-          data.status = 'Awaiting Approval'; // Keep awaiting if not yet approved
+          data.status = 'Ongoing';
         }
-        // If 'Not Started' or 'Awaiting Approval' and progress < 100, keep status as-is
       }
     } else {
       // Supervising authority is modifying the task — full control

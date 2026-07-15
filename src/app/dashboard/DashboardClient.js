@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut, LayoutDashboard, Trophy, Bell, AlertTriangle, Clock, Calendar } from 'lucide-react';
+import { LogOut, LayoutDashboard, Trophy, Bell, AlertTriangle, Clock, Calendar, Key } from 'lucide-react';
 import AdminPortal from '@/components/AdminPortal';
 import ProgramHeadPortal from '@/components/ProgramHeadPortal';
 import FacultyPortal from '@/components/FacultyPortal';
@@ -16,6 +16,31 @@ export default function DashboardClient({ user }) {
   const [tasks, setTasks] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [taskTrigger, setTaskTrigger] = useState(null);
+  const [readTaskIds, setReadTaskIds] = useState([]);
+
+  // Change Password States
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [passwordSubmitting, setPasswordSubmitting] = useState(false);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      const widget = document.getElementById('floating-calendar-widget');
+      if (widget && !widget.contains(event.target)) {
+        setIsCalendarOpen(false);
+      }
+    }
+    if (isCalendarOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isCalendarOpen]);
 
   useEffect(() => {
     async function getTasks() {
@@ -39,6 +64,7 @@ export default function DashboardClient({ user }) {
   threeDaysFromNow.setDate(now.getDate() + 3);
 
   const urgentTasks = tasks.filter(t => {
+    if (readTaskIds.includes(t.id)) return false;
     if (t.status === 'Completed' || t.status === 'Archived') return false;
     if (t.status === 'Delayed') return true;
     if (t.targetDate) {
@@ -47,7 +73,6 @@ export default function DashboardClient({ user }) {
     }
     return false;
   });
-
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -58,6 +83,40 @@ export default function DashboardClient({ user }) {
       console.error('Logout error', err);
     } finally {
       setLoggingOut(false);
+    }
+  };
+
+  const handlePasswordChange = async (e) => {
+    e.preventDefault();
+    if (!newPassword.trim()) {
+      setPasswordError('Password cannot be empty.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+    setPasswordError('');
+    setPasswordSuccess('');
+    setPasswordSubmitting(true);
+    try {
+      const res = await fetch(`/api/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: newPassword.trim() })
+      });
+      if (res.ok) {
+        setPasswordSuccess('Password successfully updated!');
+        setNewPassword('');
+        setConfirmPassword('');
+      } else {
+        const data = await res.json();
+        setPasswordError(data.error || 'Failed to update password.');
+      }
+    } catch (err) {
+      setPasswordError('Connection error. Please try again.');
+    } finally {
+      setPasswordSubmitting(false);
     }
   };
 
@@ -78,12 +137,9 @@ export default function DashboardClient({ user }) {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 shadow ring-1 ring-blue-500">
-                <span className="text-sm font-black text-white">STI</span>
-              </div>
-              <h1 className="text-base font-extrabold tracking-tight text-zinc-950 flex items-center gap-2">
-                STI Puerto Princesa
-                <span className="text-xs text-zinc-500 font-normal border-l border-zinc-300 pl-2">Task Monitor</span>
+              <h1 className="text-lg font-black tracking-tight text-zinc-950 flex items-center gap-2">
+                Puerto Princesa
+                <span className="text-xs text-zinc-400 font-bold border-l border-zinc-200 pl-2 uppercase tracking-wider">Task Monitor</span>
               </h1>
             </div>
 
@@ -127,7 +183,14 @@ export default function DashboardClient({ user }) {
                           urgentTasks.map(t => {
                             const isDelayed = t.status === 'Delayed';
                             return (
-                              <div key={t.id} className={`p-2.5 rounded-lg border text-left ${
+                              <div
+                                key={t.id}
+                                onClick={() => {
+                                  setShowNotifications(false);
+                                  setTaskTrigger(t);
+                                  setReadTaskIds(prev => [...prev, t.id]);
+                                }}
+                                className={`p-2.5 rounded-lg border text-left cursor-pointer hover:bg-zinc-50 hover:border-zinc-300 transition active:scale-[0.99] ${
                                 isDelayed ? 'bg-red-50/50 border-red-200' : 'bg-amber-50/50 border-amber-200'
                               }`}>
                                 <div className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider mb-1">
@@ -162,6 +225,17 @@ export default function DashboardClient({ user }) {
 
                 {getRoleBadge(user.role)}
                 <button
+                  onClick={() => {
+                    setPasswordError('');
+                    setPasswordSuccess('');
+                    setShowPasswordModal(true);
+                  }}
+                  className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all active:scale-95 border border-zinc-200 bg-white"
+                  title="Change Password"
+                >
+                  <Key className="h-4 w-4" />
+                </button>
+                <button
                   onClick={handleLogout}
                   disabled={loggingOut}
                   className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all active:scale-95 border border-zinc-200 bg-white"
@@ -190,39 +264,41 @@ export default function DashboardClient({ user }) {
               <LayoutDashboard className="h-4 w-4" />
               My Dashboard
             </button>
-            <button
-              onClick={() => setActiveTab('leaderboard')}
-              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all border ${
-                activeTab === 'leaderboard'
-                  ? 'bg-yellow-50 text-yellow-850 border-yellow-200'
-                  : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 border-transparent'
-              }`}
-            >
-              <Trophy className="h-4 w-4" />
-              🏆 Leaderboard
-            </button>
+            {user.role !== 'FACULTY_STAFF' && (
+              <button
+                onClick={() => setActiveTab('leaderboard')}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition-all border ${
+                  activeTab === 'leaderboard'
+                    ? 'bg-yellow-50 text-yellow-850 border-yellow-200'
+                    : 'text-zinc-600 hover:text-zinc-900 hover:bg-zinc-50 border-transparent'
+                }`}
+              >
+                <Trophy className="h-4 w-4" />
+                🏆 Leaderboard
+              </button>
+            )}
           </nav>
         </div>
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 relative z-10">
-        {activeTab === 'leaderboard' ? (
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 relative">
+        {activeTab === 'leaderboard' && user.role !== 'FACULTY_STAFF' ? (
           <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-6">
             <Leaderboard user={user} />
           </div>
         ) : (
           <>
-            {(user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'SCHOOL_ADMIN') && <AdminPortal user={user} />}
-            {user.role === 'PROGRAM_HEAD' && <ProgramHeadPortal user={user} />}
-            {user.role === 'FACULTY_STAFF' && <FacultyPortal user={user} />}
+            {(user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'SCHOOL_ADMIN') && <AdminPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} />}
+            {user.role === 'PROGRAM_HEAD' && <ProgramHeadPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} />}
+            {user.role === 'FACULTY_STAFF' && <FacultyPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} />}
           </>
         )}
       </main>
 
       {/* Sticky Interactive Calendar Widget (Bottom Right) */}
       <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
-        <div className={`transition-all duration-300 ease-in-out bg-white/80 backdrop-blur-md border border-zinc-250/60 shadow-2xl rounded-2xl overflow-hidden flex flex-col ${
+        <div id="floating-calendar-widget" className={`transition-all duration-300 ease-in-out bg-white/80 backdrop-blur-md border border-zinc-250/60 shadow-2xl rounded-2xl overflow-hidden flex flex-col ${
           isCalendarOpen 
             ? 'w-[400px] h-[550px] p-4 opacity-100' 
             : 'w-72 h-14 p-3 hover:bg-white/95 cursor-pointer opacity-90 hover:opacity-100'
@@ -247,15 +323,18 @@ export default function DashboardClient({ user }) {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto min-h-0">
-                <CalendarView tasks={tasks} isFloating={true} />
+                <CalendarView tasks={tasks} isFloating={true} onTaskClick={(t) => { setIsCalendarOpen(false); setTaskTrigger(t); }} />
               </div>
             </div>
           ) : (
             <div className="flex items-center justify-between w-full h-full">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-blue-50 rounded-lg">
+                <div className="p-1.5 bg-blue-50 rounded-lg relative">
                   <Calendar className="h-4 w-4 text-blue-600" />
-                </div>
+                  {urgentTasks.length > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white animate-pulse" />
+                  )}
+                  </div>
                 <div className="text-left">
                   <p className="text-[11px] font-black text-zinc-800 uppercase tracking-wide leading-none">Deadlines Calendar</p>
                   <p className="text-[10px] text-zinc-500 font-bold mt-0.5 leading-none">Interactive Sticky Note</p>
@@ -269,8 +348,71 @@ export default function DashboardClient({ user }) {
         </div>
       </div>
 
+      {showPasswordModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-sm w-full animate-scaleIn text-zinc-900">
+            <h3 className="text-lg font-bold text-zinc-900 mb-2">Change Password</h3>
+            <p className="text-xs text-zinc-500 mb-4">Set a new password for your account.</p>
+
+            {passwordError && (
+              <div className="bg-red-50 border border-red-200 p-2.5 rounded-lg text-red-800 font-bold text-xs mb-3">
+                {passwordError}
+              </div>
+            )}
+            {passwordSuccess && (
+              <div className="bg-green-50 border border-green-200 p-2.5 rounded-lg text-green-800 font-bold text-xs mb-3">
+                {passwordSuccess}
+              </div>
+            )}
+
+            <form onSubmit={handlePasswordChange} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
+                  required
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={passwordSubmitting}
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-5 text-xs font-bold shadow disabled:opacity-50"
+                >
+                  {passwordSubmitting ? 'Saving...' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <footer className="py-6 text-center text-xs text-zinc-500 border-t border-zinc-200 bg-white">
-        <p>© 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.</p>
+        <p>© 2026 Puerto Princesa Task Monitoring System. All rights reserved.</p>
       </footer>
     </div>
   );

@@ -12,8 +12,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "STI Puerto Princesa - Task Monitor",
-  description: "Task Monitoring and Accomplishment reporting system for STI College Puerto Princesa",
+  title: "Puerto Princesa - Task Monitor",
+  description: "Task Monitoring and Accomplishment reporting system",
 };
 
 export default function RootLayout({ children }) {

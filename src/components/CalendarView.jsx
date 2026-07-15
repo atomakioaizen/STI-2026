@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 
-export default function CalendarView({ tasks, onClose, isFloating = false }) {
+export default function CalendarView({ tasks, onClose, isFloating = false, onTaskClick }) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDayTasks, setSelectedDayTasks] = useState(null);
   const [selectedDayStr, setSelectedDayStr] = useState('');
@@ -201,7 +201,11 @@ export default function CalendarView({ tasks, onClose, isFloating = false }) {
                 };
 
                 return (
-                  <div key={t.id} className="p-3 bg-white border border-zinc-200 rounded-xl shadow-sm text-left hover:border-zinc-300 transition">
+                  <div
+                    key={t.id}
+                    onClick={() => { if (onTaskClick) onTaskClick(t); }}
+                    className="p-3 bg-white border border-zinc-200 rounded-xl shadow-sm text-left hover:border-zinc-300 transition cursor-pointer active:scale-[0.98]"
+                  >
                     <div className="flex justify-between items-start gap-2 mb-1.5">
                       <span className="font-bold text-xs text-zinc-800 line-clamp-1">{t.category}</span>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${getStatusColor(t.status)}`}>

@@ -10,7 +10,7 @@ import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
 import { exportTasksToExcel } from '@/lib/reports';
 
-export default function ProgramHeadPortal({ user }) {
+export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger }) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [facultyList, setFacultyList] = useState([]);
@@ -81,6 +81,17 @@ export default function ProgramHeadPortal({ user }) {
     fetchArchivedTasks();
     fetchFaculty();
   }, [statusFilter, priorityFilter, timeframeFilter, selectedFacultyId]);
+
+  useEffect(() => {
+    if (taskTrigger && setTaskTrigger) {
+      if (taskTrigger.userId === user.id) {
+        handleOpenEditSelf(taskTrigger);
+      } else {
+        handleOpenReview(taskTrigger);
+      }
+      setTaskTrigger(null);
+    }
+  }, [taskTrigger]);
 
   async function fetchTasks() {
     setLoading(true);
@@ -170,7 +181,12 @@ export default function ProgramHeadPortal({ user }) {
   };
 
   const handleUpdateTaskReview = async (e) => {
-    e.preventDefault();
+      e.preventDefault();
+      triggerConfirm('Submit Review', 'Are you sure you want to save your review and signing changes?', () => {
+        executeUpdateTaskReview();
+      });
+    };
+    const executeUpdateTaskReview = async () => {
     setUpdating(true);
 
     try {
@@ -197,8 +213,53 @@ export default function ProgramHeadPortal({ user }) {
     }
   };
 
-  const handleCreateSelfTask = async (e) => {
+  const handleForceTaskSubmit = async (e) => {
     e.preventDefault();
+    if (!forceNoteInput.trim()) {
+      triggerAlert('Required', 'Please provide a note/explanation for forcing this task.');
+      return;
+    }
+    const tId = forcingTaskId;
+    const note = forceNoteInput.trim();
+    setForcingTaskId(null);
+    setForceNoteInput('');
+
+    try {
+      const res = await fetch(`/api/tasks/${tId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Not Started', assignedNote: note })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Forced', 'Task has been successfully pushed and made active.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCancelPHNominatedTask = async (taskId) => {
+    triggerConfirm('Cancel Task', 'Are you sure you want to cancel this rejected task nomination? This will permanently delete it.', async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+        if (res.ok) {
+          fetchTasks();
+          triggerAlert('Task Cancelled', 'Nomination was successfully cancelled.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  };
+
+  const handleCreateSelfTask = async (e) => {
+      e.preventDefault();
+      triggerConfirm('Submit Nomination', 'Are you sure you want to submit this self-nominated task?', () => {
+        executeCreateSelfTask();
+      });
+    };
+    const executeCreateSelfTask = async () => {
     if (!category.trim() || !taskDescription.trim() || !priority) {
       setFormError('Please fill in Category, Task Description and Priority.');
       return;
@@ -250,7 +311,12 @@ export default function ProgramHeadPortal({ user }) {
   };
 
   const handleUpdateSelfTask = async (e) => {
-    e.preventDefault();
+      e.preventDefault();
+      triggerConfirm('Save Changes', 'Are you sure you want to update this deliverable?', () => {
+        executeUpdateSelfTask();
+      });
+    };
+    const executeUpdateSelfTask = async () => {
     setUpdatingTask(true);
 
     try {
@@ -277,8 +343,21 @@ export default function ProgramHeadPortal({ user }) {
     }
   };
 
-  const handleRequestDeletion = async (taskId) => {
-    if (!confirm('Are you sure you want to request deletion of this task nomination?')) return;
+  const deleteNominationPHAction = async (taskId) => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Awaiting Deletion' })
+        });
+        if (res.ok) fetchTasks();
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    
+    const handleRequestDeletion = async (taskId) => {
+    triggerConfirm('Request Deletion', 'Are you sure you want to request deletion of this task nomination?', () => { deleteNominationPHAction(taskId); }); return;
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
@@ -309,8 +388,20 @@ export default function ProgramHeadPortal({ user }) {
     }
   };
 
-  const handleDeleteTask = async (taskId) => {
-    if (!confirm('Are you sure you want to permanently delete this task?')) return;
+  const deletePHAction = async (taskId) => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+        if (res.ok) {
+          fetchTasks();
+          fetchArchivedTasks();
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    
+    const handleDeleteTask = async (taskId) => {
+    triggerConfirm('Delete Task', 'Are you sure you want to permanently delete this task nomination?', () => { deletePHAction(taskId); }); return;
     try {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'DELETE'
@@ -335,7 +426,8 @@ export default function ProgramHeadPortal({ user }) {
   const pendingDeletions = tasks.filter(t => t.status === 'Awaiting Deletion').length;
 
   return (
-    <div className="space-y-8 animate-fadeIn text-zinc-950">
+    <>
+      <div className="space-y-8 animate-fadeIn text-zinc-950">
       
       {/* Super Alert Modal for Overdue deadlines */}
       {showSuperAlert && (
@@ -482,13 +574,89 @@ export default function ProgramHeadPortal({ user }) {
       </div>
 
 
+      </div>
+
       {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
 
       {/* Faculty Tasks List Modal */}
+      {/* Rejected Task alerts */}
+      {tasks.filter(t => t.status === 'Rejected' && t.nominatedById === user.id).length > 0 && (
+        <div className="mb-6 p-5 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl shadow-xs">
+          <h4 className="font-extrabold text-red-800 text-sm mb-1 uppercase tracking-wide">Rejected Deliverable Nominations</h4>
+          <p className="text-xs text-zinc-500 mb-4 font-medium">The following tasks you nominated were rejected by the assignees. Review their reasons and push/force or cancel the task.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tasks.filter(t => t.status === 'Rejected' && t.nominatedById === user.id).map(t => (
+              <div key={t.id} className="p-4 bg-white border border-red-150 rounded-xl flex flex-col justify-between shadow-3xs">
+                <div>
+                  <div className="flex justify-between items-start gap-2 mb-2">
+                    <span className="bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{t.category}</span>
+                    <span className="text-[10px] text-zinc-400 font-bold">Assignee: {t.user?.name}</span>
+                  </div>
+                  <p className="font-bold text-zinc-900 text-sm mb-1">{t.taskDescription}</p>
+                  <div className="p-2.5 bg-red-50/50 rounded-lg border border-red-100/50 mb-3 mt-2">
+                    <p className="text-[10px] text-zinc-400 font-black uppercase tracking-wider mb-0.5">Rejection Reason</p>
+                    <p className="text-xs text-red-700 italic font-bold">"{t.rejectionReason}"</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 border-t border-zinc-50 pt-3">
+                  <button
+                    onClick={() => setForcingTaskId(t.id)}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-3 rounded-lg shadow-xs transition"
+                  >
+                    Force / Push Task
+                  </button>
+                  <button
+                    onClick={() => handleCancelPHNominatedTask(t.id)}
+                    className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 font-bold text-xs py-2 px-3 rounded-lg transition"
+                  >
+                    Cancel Task
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Force Task Explanation Modal popup */}
+      {forcingTaskId && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
+            <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">Force Task Assignment</h4>
+            <p className="text-xs text-zinc-500 font-medium mb-4 leading-relaxed">Provide an explanation or note (mandatory) explaining why this task is required.</p>
+            <form onSubmit={handleForceTaskSubmit} className="space-y-4">
+              <textarea
+                value={forceNoteInput}
+                onChange={(e) => setForceNoteInput(e.target.value)}
+                placeholder="Supervisor explanation/instruction note..."
+                rows={3}
+                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 px-4 text-xs font-medium placeholder-zinc-400 focus:bg-white focus:outline-none resize-none"
+                required
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setForcingTaskId(null); setForceNoteInput(''); }}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 font-bold rounded-lg text-xs transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-xs transition shadow-md"
+                >
+                  Push Task
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {activeModal === 'faculty_tasks' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 md:px-6 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-7xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
-            <div className="flex justify-between items-center border-b border-zinc-150 p-6 shrink-0">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-zinc-200 p-6 shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <Users className="h-5 w-5 text-blue-600" />
                 Faculty Deliverables & Statuses
@@ -505,7 +673,7 @@ export default function ProgramHeadPortal({ user }) {
                   <option value="all">All Tasks</option>
                 </select>
                 <button 
-                  onClick={() => setActiveModal(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                   className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
                 >
                   Close
@@ -619,8 +787,8 @@ export default function ProgramHeadPortal({ user }) {
                     </thead>
                     <tbody className="divide-y divide-zinc-200">
                       {[...facultyTasks].sort((a, b) => {
-                        let aVal = a[sortField];
-                        let bVal = b[sortField];
+                        let aVal = sortField.includes('.') ? getVal(a, sortField) : a[sortField];
+                        let bVal = sortField.includes('.') ? getVal(b, sortField) : b[sortField];
                         if (sortField === 'targetDate') {
                           aVal = aVal ? new Date(aVal).getTime() : Infinity;
                           bVal = bVal ? new Date(bVal).getTime() : Infinity;
@@ -681,7 +849,7 @@ export default function ProgramHeadPortal({ user }) {
                               </div>
                               <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
                                 <div 
-                                  className={`h-full rounded-full ${isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : 'bg-blue-500'}`}
+                                  className={`h-full rounded-full ${isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : 'bg-green-500'}`}
                                   style={{ width: `${task.progress}%` }}
                                 ></div>
                               </div>
@@ -709,15 +877,15 @@ export default function ProgramHeadPortal({ user }) {
 
       {/* My Personal Tasks Modal */}
       {activeModal === 'my_tasks' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-6xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <h3 className="text-xl font-bold flex items-center gap-2">
                 <List className="h-5 w-5 text-zinc-700" />
                 My Nominations & Deliverables
               </h3>
               <button 
-                onClick={() => setActiveModal(null)}
+                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                 className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
               >
                 Close List
@@ -746,7 +914,20 @@ export default function ProgramHeadPortal({ user }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {myTasks.map(task => {
+                    {myTasks.sort((a, b) => {
+                      let aVal = a[personalSortField];
+                      let bVal = b[personalSortField];
+                      if (personalSortField === 'targetDate') {
+                        aVal = aVal ? new Date(aVal).getTime() : Infinity;
+                        bVal = bVal ? new Date(bVal).getTime() : Infinity;
+                      } else {
+                        aVal = aVal ? String(aVal).toLowerCase() : '';
+                        bVal = bVal ? String(bVal).toLowerCase() : '';
+                      }
+                      if (aVal < bVal) return personalSortDirection === 'asc' ? -1 : 1;
+                      if (aVal > bVal) return personalSortDirection === 'asc' ? 1 : -1;
+                      return 0;
+                    }).map(task => {
                       const isDelayed = task.status === 'Delayed';
                       const isCompleted = task.status === 'Completed';
 
@@ -788,7 +969,7 @@ export default function ProgramHeadPortal({ user }) {
                               </div>
                               <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
                                 <div 
-                                  className={`h-full rounded-full ${isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : 'bg-blue-500'}`}
+                                  className={`h-full rounded-full ${isCompleted ? 'bg-green-500' : isDelayed ? 'bg-red-500' : 'bg-green-500'}`}
                                   style={{ width: `${task.progress}%` }}
                                 ></div>
                               </div>
@@ -825,63 +1006,84 @@ export default function ProgramHeadPortal({ user }) {
 
       {/* Alerts Notices Modal */}
       {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-lg w-full animate-scaleIn text-zinc-900 text-center">
-            <h3 className="text-xl font-bold flex items-center gap-2 justify-center text-red-650 mb-2">
-              <Bell className="h-6 w-6" />
-              Department Warning Hub
-            </h3>
-            <p className="text-xs text-zinc-500 font-semibold mb-6">
-              Critical items requiring attention from the department head.
-            </p>
-            <div className="text-left space-y-3 max-h-[300px] overflow-y-auto mb-6">
-              {pendingApprovals > 0 && (
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex gap-3 items-start">
-                  <CheckCircle2 className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-purple-800 uppercase tracking-wide">Approvals Pending</h4>
-                    <p className="text-xs text-zinc-700 font-medium">You have {pendingApprovals} task completion requests awaiting review.</p>
-                  </div>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-red-50 rounded-lg"><Bell className="h-5 w-5 text-red-600" /></div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900">Department Warning Hub</h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">Critical items requiring your attention</p>
                 </div>
-              )}
-              {pendingDeletions > 0 && (
-                <div className="p-3 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 items-start">
-                  <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-orange-800 uppercase tracking-wide">Deletions Requested</h4>
-                    <p className="text-xs text-zinc-700 font-medium">You have {pendingDeletions} tasks awaiting deletion signatures.</p>
-                  </div>
-                </div>
-              )}
-              {delayedTasks > 0 && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start">
-                  <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-red-800 uppercase tracking-wide">Delayed Deliverables</h4>
-                    <p className="text-xs text-zinc-700 font-medium">There are {delayedTasks} delayed tasks inside your department.</p>
-                  </div>
-                </div>
-              )}
-              {pendingApprovals === 0 && pendingDeletions === 0 && delayedTasks === 0 && (
-                <p className="text-center text-xs text-zinc-400 font-semibold py-8">
-                  Everything is perfect. No alerts.
-                </p>
-              )}
+              </div>
+              <button onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Close</button>
             </div>
-            <button
-              onClick={() => setActiveModal(null)}
-              className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold py-3 px-6 rounded-xl border border-zinc-200"
-            >
-              Close Alerts
-            </button>
+            {/* Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                <div className="space-y-3">
+                  <div className={`p-4 rounded-xl border flex flex-col gap-1 ${pendingApprovals > 0 ? 'bg-purple-50 border-purple-200' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <CheckCircle2 className={`h-6 w-6 ${pendingApprovals > 0 ? 'text-purple-600' : 'text-zinc-300'}`} />
+                    <p className="text-2xl font-black text-zinc-900 mt-1">{pendingApprovals}</p>
+                    <p className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Pending Approvals</p>
+                  </div>
+                  <div className={`p-4 rounded-xl border flex flex-col gap-1 ${pendingDeletions > 0 ? 'bg-orange-50 border-orange-200' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <AlertTriangle className={`h-6 w-6 ${pendingDeletions > 0 ? 'text-orange-600' : 'text-zinc-300'}`} />
+                    <p className="text-2xl font-black text-zinc-900 mt-1">{pendingDeletions}</p>
+                    <p className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Deletion Requests</p>
+                  </div>
+                  <div className={`p-4 rounded-xl border flex flex-col gap-1 ${delayedTasks > 0 ? 'bg-red-50 border-red-200' : 'bg-zinc-50 border-zinc-200'}`}>
+                    <Clock className={`h-6 w-6 ${delayedTasks > 0 ? 'text-red-600' : 'text-zinc-300'}`} />
+                    <p className="text-2xl font-black text-zinc-900 mt-1">{delayedTasks}</p>
+                    <p className="text-xs font-bold text-zinc-600 uppercase tracking-wide">Delayed Tasks</p>
+                  </div>
+                </div>
+                <div className="md:col-span-2 space-y-3">
+                  {pendingApprovals > 0 && (
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-xl flex gap-3 items-start">
+                      <CheckCircle2 className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-extrabold text-sm text-purple-800 mb-0.5">Approvals Pending</h4>
+                        <p className="text-xs text-zinc-700 font-medium">You have <strong>{pendingApprovals}</strong> task completion requests awaiting your review.</p>
+                      </div>
+                    </div>
+                  )}
+                  {pendingDeletions > 0 && (
+                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-xl flex gap-3 items-start">
+                      <AlertTriangle className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-extrabold text-sm text-orange-800 mb-0.5">Deletions Requested</h4>
+                        <p className="text-xs text-zinc-700 font-medium">You have <strong>{pendingDeletions}</strong> tasks awaiting deletion signatures.</p>
+                      </div>
+                    </div>
+                  )}
+                  {delayedTasks > 0 && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start">
+                      <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-extrabold text-sm text-red-800 mb-0.5">Delayed Deliverables</h4>
+                        <p className="text-xs text-zinc-700 font-medium">There are <strong>{delayedTasks}</strong> delayed tasks in your department.</p>
+                      </div>
+                    </div>
+                  )}
+                  {pendingApprovals === 0 && pendingDeletions === 0 && delayedTasks === 0 && (
+                    <div className="flex flex-col items-center justify-center h-48 gap-3">
+                      <CheckCircle2 className="h-12 w-12 text-green-400" />
+                      <p className="text-sm font-bold text-zinc-500">All clear! No pending alerts.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
       {/* Archive Modal */}
       {activeModal === 'archive' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl max-w-5xl w-full flex flex-col animate-scaleIn text-zinc-900 overflow-hidden" style={{height: 'calc(100vh - 7rem)', maxHeight: '85vh'}}>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}}>
             <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <div>
                 <h3 className="text-xl font-bold flex items-center gap-2 text-purple-800">
@@ -893,7 +1095,7 @@ export default function ProgramHeadPortal({ user }) {
                 </p>
               </div>
               <button 
-                onClick={() => setActiveModal(null)}
+                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                 className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
               >
                 Close
@@ -911,16 +1113,29 @@ export default function ProgramHeadPortal({ user }) {
             ) : (
               <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[350px]">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
+                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider select-none">
                     <tr>
-                      <th className="py-2.5 px-4">Owner</th>
-                      <th className="py-2.5 px-4">Task Details</th>
-                      <th className="py-2.5 px-4">Completion Date</th>
+                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.name'), setArchiveSortDirection('asc')); }}>Owner {archiveSortField === 'user.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'taskDescription' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('taskDescription'), setArchiveSortDirection('asc')); }}>Task Details {archiveSortField === 'taskDescription' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'updatedAt' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('updatedAt'), setArchiveSortDirection('asc')); }}>Completion Date {archiveSortField === 'updatedAt' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                       <th className="py-2.5 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {archivedTasks.map(t => (
+                    {archivedTasks.sort((a, b) => {
+                      let aVal = archiveSortField.includes('.') ? getVal(a, archiveSortField) : a[archiveSortField];
+                      let bVal = archiveSortField.includes('.') ? getVal(b, archiveSortField) : b[archiveSortField];
+                      if (archiveSortField === 'updatedAt') {
+                        aVal = aVal ? new Date(aVal).getTime() : 0;
+                        bVal = bVal ? new Date(bVal).getTime() : 0;
+                      } else {
+                        aVal = aVal ? String(aVal).toLowerCase() : '';
+                        bVal = bVal ? String(bVal).toLowerCase() : '';
+                      }
+                      if (aVal < bVal) return archiveSortDirection === 'asc' ? -1 : 1;
+                      if (aVal > bVal) return archiveSortDirection === 'asc' ? 1 : -1;
+                      return 0;
+                    }).map(t => (
                       <tr key={t.id} className="hover:bg-zinc-50 transition">
                         <td className="py-3 px-4 font-bold text-zinc-800">
                           {t.user?.name}
@@ -965,19 +1180,34 @@ export default function ProgramHeadPortal({ user }) {
 
       {/* Nominate Task Modal */}
       {activeModal === 'nominate' && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-zinc-200 shadow-2xl p-6 max-w-xl w-full animate-scaleIn text-zinc-900">
-            <div className="flex justify-between items-center border-b border-zinc-100 pb-4 mb-6">
-              <h3 className="text-lg font-bold flex items-center gap-2">
-                <PlusCircle className="h-5 w-5 text-blue-600" />
-                Nominate My Task
-              </h3>
-              <button onClick={() => setActiveModal(null)} className="text-zinc-400 text-xs px-2 py-1">
-                Cancel
-              </button>
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 rounded-lg"><PlusCircle className="h-5 w-5 text-blue-600" /></div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900">Nominate My Task</h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">Submit a personal deliverable for tracking</p>
+                </div>
+              </div>
+              <button onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Cancel</button>
             </div>
 
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
             <form onSubmit={handleCreateSelfTask} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Assign To / Nominate User</label>
+                <select
+                  value={assignToUserId}
+                  onChange={(e) => setAssignToUserId(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none focus:bg-white"
+                >
+                  <option value="">Myself (Self-Nomination)</option>
+                  {faculty.map(f => (
+                    <option key={f.id} value={f.id}>{f.name} (Faculty Staff)</option>
+                  ))}
+                </select>
+              </div>
               {formError && (
                 <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-xs font-bold">
                   {formError}
@@ -1062,7 +1292,7 @@ export default function ProgramHeadPortal({ user }) {
               <div className="border-t border-zinc-100 pt-4 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setActiveModal(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
                   className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
                 >
                   Cancel
@@ -1076,6 +1306,7 @@ export default function ProgramHeadPortal({ user }) {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
@@ -1085,12 +1316,19 @@ export default function ProgramHeadPortal({ user }) {
 
       {/* Reviewing Faculty Task Modal */}
       {reviewingTask && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
-            <h3 className="text-lg font-bold mb-2 text-zinc-900">Review Faculty Deliverable</h3>
-            <p className="text-zinc-500 text-xs mb-4">
-              Owner: <span className="font-bold text-zinc-800">{reviewingTask.user?.name}</span> • Description: <span className="italic">{reviewingTask.taskDescription}</span>
-            </p>
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setReviewingTask(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 rounded-lg"><Eye className="h-5 w-5 text-blue-600" /></div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900">Review Faculty Deliverable</h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">Owner: <strong className="text-zinc-700">{reviewingTask.user?.name}</strong> — {reviewingTask.taskDescription?.substring(0,60)}</p>
+                </div>
+              </div>
+              <button onClick={(e) => { if (e.target === e.currentTarget) setReviewingTask(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Cancel</button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
 
             <form onSubmit={handleUpdateTaskReview} className="space-y-4">
               <div>
@@ -1119,7 +1357,7 @@ export default function ProgramHeadPortal({ user }) {
                   step="5"
                   value={reviewProgress}
                   onChange={(e) => setReviewProgress(parseInt(e.target.value, 10))}
-                  className="w-full h-1.5 bg-zinc-150 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  style={{ background: `linear-gradient(to right, #22c55e 0%, #22c55e ${editProgress}%, #e4e4e7 ${editProgress}%, #e4e4e7 100%)` }} className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600 bg-zinc-200"
                 />
               </div>
 
@@ -1137,7 +1375,7 @@ export default function ProgramHeadPortal({ user }) {
               <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4">
                 <button
                   type="button"
-                  onClick={() => setReviewingTask(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setReviewingTask(null); }}
                   className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
                 >
                   Cancel
@@ -1151,17 +1389,26 @@ export default function ProgramHeadPortal({ user }) {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
 
       {/* Editing Self Task Modal */}
       {editingTask && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/60 pt-20 pb-8 px-4 backdrop-blur-xs overflow-y-auto">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
-            <h3 className="text-lg font-bold mb-2 text-zinc-900">Edit My Deliverable</h3>
-            <p className="text-zinc-500 text-xs mb-4">Task: <span className="font-bold">{editingTask.taskDescription}</span></p>
-
+        <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-zinc-100 rounded-lg"><Edit2 className="h-5 w-5 text-zinc-700" /></div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900">Edit My Deliverable</h3>
+                  <p className="text-[11px] text-zinc-400 font-medium">Task: <strong className="text-zinc-700">{editingTask.taskDescription?.substring(0,60)}</strong></p>
+                </div>
+              </div>
+              <button onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Cancel</button>
+            </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
             <form onSubmit={handleUpdateSelfTask} className="space-y-4">
               <div>
                 <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider mb-2">
@@ -1175,7 +1422,7 @@ export default function ProgramHeadPortal({ user }) {
                   step="5"
                   value={editProgress}
                   onChange={(e) => setEditProgress(parseInt(e.target.value, 10))}
-                  className="w-full h-1.5 bg-zinc-150 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  style={{ background: `linear-gradient(to right, #22c55e 0%, #22c55e ${editProgress}%, #e4e4e7 ${editProgress}%, #e4e4e7 100%)` }} className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600 bg-zinc-200"
                 />
               </div>
 
@@ -1202,7 +1449,7 @@ export default function ProgramHeadPortal({ user }) {
               <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4">
                 <button
                   type="button"
-                  onClick={() => setEditingTask(null)}
+                  onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}
                   className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
                 >
                   Cancel
@@ -1216,10 +1463,39 @@ export default function ProgramHeadPortal({ user }) {
                 </button>
               </div>
             </form>
+            </div>
           </div>
         </div>
       )}
-
-    </div>
+      {customDialog && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
+            <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">{customDialog.title}</h4>
+            <p className="text-xs text-zinc-500 font-medium mb-6 leading-relaxed">{customDialog.message}</p>
+            <div className="flex justify-end gap-2">
+              {customDialog.type === 'confirm' && (
+                <button
+                  onClick={() => setCustomDialog(null)}
+                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 font-bold rounded-lg text-xs transition"
+                >
+                  No
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customDialog.type === 'confirm' && customDialog.onConfirm) {
+                    customDialog.onConfirm();
+                  }
+                  setCustomDialog(null);
+                }}
+                className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white font-bold rounded-lg text-xs transition shadow-md shadow-zinc-950/10"
+              >
+                {customDialog.type === 'confirm' ? 'Yes' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

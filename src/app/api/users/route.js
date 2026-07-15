@@ -68,12 +68,8 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const currentUser = await getSessionUser();
-    
-    // STRICT RULE: Only SCHOOL_ADMIN can create accounts
-    const isAllowed = currentUser && currentUser.role === 'SCHOOL_ADMIN';
-
-    if (!isAllowed) {
-      return NextResponse.json({ error: 'Forbidden — School Admin privileges required' }, { status: 403 });
+    if (!currentUser) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { name, username, password, position, role, departmentId } = await request.json();
@@ -84,6 +80,24 @@ export async function POST(request) {
         { status: 400 }
       );
     }
+
+    const ROLE_LEVELS = {
+      'SCHOOL_ADMIN': 4,
+      'PRINCIPAL': 3,
+      'PROGRAM_HEAD': 2,
+      'FACULTY_STAFF': 1
+    };
+
+    const currentUserLevel = ROLE_LEVELS[currentUser.role] || 0;
+    const targetUserLevel = ROLE_LEVELS[role] || 0;
+
+    if (currentUserLevel <= targetUserLevel || currentUserLevel <= 1) {
+      return NextResponse.json(
+        { error: 'Forbidden — You do not have permission to create this type of account' },
+        { status: 403 }
+      );
+    }
+
 
     const cleanUsername = username.trim().toLowerCase();
 
