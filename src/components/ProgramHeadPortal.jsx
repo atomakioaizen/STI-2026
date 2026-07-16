@@ -311,6 +311,22 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
     }
   };
 
+    const handleForceTaskDirect = async (taskId, note) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Not Started', assignedNote: note })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Forced', 'Task has been successfully pushed and made active.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleForceTaskSubmit = async (e) => {
     e.preventDefault();
     if (!forceNoteInput.trim()) {
@@ -1629,14 +1645,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
               </button>
               <button
                 onClick={() => {
-                  const reason = prompt('Please provide a reason for rejecting this task (mandatory):');
-                  if (reason === null) return;
-                  if (!reason.trim()) {
-                    alert('Reason is required to reject.');
-                    return;
-                  }
-                  handleRejectTaskDirect(nominatedTaskToAction.id, reason.trim());
-                  setNominatedTaskToAction(null);
+                  setRejectingTaskFromClick(nominatedTaskToAction);
                 }}
                 className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs py-2.5 px-3 rounded-lg transition"
               >
