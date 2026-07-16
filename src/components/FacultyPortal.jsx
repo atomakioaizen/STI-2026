@@ -181,6 +181,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
         setEvidenceLink('');
         setActiveModal(null);
         fetchTasks();
+        triggerAlert('Nomination Successful', 'Your deliverable has been successfully created and submitted!');
       } else {
         const data = await res.json();
         setFormError(data.error || 'Failed to nominate task.');

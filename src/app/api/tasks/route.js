@@ -355,7 +355,8 @@ export async function POST(request) {
         remarks: remarks ? remarks.trim() : '',
         evidenceLink: evidenceLink ? evidenceLink.trim() : '',
         archived: isArchived,
-        userId: targetOwnerId
+        userId: targetOwnerId,
+        nominatedById: targetOwnerId !== user.userId ? user.userId : null
       },
       include: {
         user: {

@@ -430,6 +430,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         setTaskTargetDate('');
         setActiveModal(null);
         fetchTasks();
+        triggerAlert('Assignment Successful', 'The deliverable has been successfully assigned and logged!');
       } else {
         const data = await res.json();
         setTaskFormError(data.error || 'Failed to assign task.');

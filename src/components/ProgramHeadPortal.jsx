@@ -369,7 +369,8 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
           progress: 0,
           remarks: remarks.trim(),
           evidenceLink: evidenceLink.trim(),
-          userId: user.id
+          userId: assignToUserId ? parseInt(assignToUserId, 10) : user.id,
+          nominatedById: assignToUserId ? user.id : null
         })
       });
 

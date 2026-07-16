@@ -29,7 +29,7 @@ export default function SuperAlertModal({ tasks, user, onClose, onAcceptTask, on
     return false;
   });
 
-  if (urgentTasks.length === 0) return null;
+  if (!user || urgentTasks.length === 0) return null;
 
   const handleRejectClick = (taskId) => {
     setRejectingTaskId(taskId);
