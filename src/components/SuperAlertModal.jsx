@@ -12,6 +12,8 @@ export default function SuperAlertModal({ tasks, user, onClose, onAcceptTask, on
   const threeDaysFromNow = new Date();
   threeDaysFromNow.setDate(now.getDate() + 3);
 
+  if (!user) return null;
+
   // Filter urgent tasks:
   // 1. Pending Acceptance assigned to the user
   // 2. Delayed or Due soon tasks
@@ -29,7 +31,7 @@ export default function SuperAlertModal({ tasks, user, onClose, onAcceptTask, on
     return false;
   });
 
-  if (!user || urgentTasks.length === 0) return null;
+  if (urgentTasks.length === 0) return null;
 
   const handleRejectClick = (taskId) => {
     setRejectingTaskId(taskId);
