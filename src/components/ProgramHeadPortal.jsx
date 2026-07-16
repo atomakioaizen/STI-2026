@@ -153,6 +153,42 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
     }
   }
 
+  
+  const handleAcceptTaskDirect = async (taskId) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Not Started' })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Accepted', 'Task has been successfully added to your active deliverables.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectTaskDirect = async (taskId, reason) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected', rejectionReason: reason })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Rejected', 'Rejection submitted. Your supervisor has been notified.');
+      } else {
+        const data = await res.json();
+        triggerAlert('Error', data.error || 'Failed to reject task.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleExport = (timeframe) => {
     const now = new Date();
     let filtered = [...tasks, ...archivedTasks];
@@ -706,76 +742,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
         </div>
       )}
 
-      {/* Nominated Tasks Awaiting Acceptance for PH */}
-      {tasks.filter(t => t.status === 'Pending Acceptance' && t.userId === user.id).length > 0 && (
-        <div className="mb-6 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl shadow-xs">
-          <h4 className="font-extrabold text-blue-800 text-sm mb-1 uppercase tracking-wide">Nominated Tasks Awaiting Acceptance</h4>
-          <p className="text-xs text-zinc-500 mb-4 font-medium">Your supervisor has assigned the following deliverables. Please accept or reject them.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {tasks.filter(t => t.status === 'Pending Acceptance' && t.userId === user.id).map(t => (
-              <div key={t.id} className="p-4 bg-white border border-blue-150 rounded-xl flex flex-col justify-between shadow-3xs">
-                <div>
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{t.category}</span>
-                    <span className="text-[10px] text-zinc-400 font-bold">Priority: {t.priority}</span>
-                  </div>
-                  <p className="font-bold text-zinc-900 text-sm mb-1">{t.taskDescription}</p>
-                  {t.targetDate && <p className="text-[10px] text-zinc-400 font-semibold mb-3">Deadline: {new Date(t.targetDate).toLocaleDateString()}</p>}
-                </div>
-                <div className="flex gap-2 mt-4 border-t border-zinc-50 pt-3">
-                  <button
-                    onClick={() => handleAcceptTask(t.id)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-3 rounded-lg shadow-xs transition"
-                  >
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => setRejectingTaskId(t.id)}
-                    className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs py-2 px-3 rounded-lg transition"
-                  >
-                    Reject
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
-      {/* Reject Task Reason Modal popup for PH */}
-      {rejectingTaskId && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
-            <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">Reject Task Nomination</h4>
-            <p className="text-xs text-zinc-500 font-medium mb-4 leading-relaxed">Providing a reason is mandatory to reject this assigned task.</p>
-            <form onSubmit={handleRejectTaskSubmit} className="space-y-4">
-              <textarea
-                value={rejectionInputReason}
-                onChange={(e) => setRejectionInputReason(e.target.value)}
-                placeholder="Reason for rejection (e.g., overlapping deadlines, resource constraints)..."
-                rows={3}
-                className="w-full rounded-xl border border-zinc-200 bg-zinc-50 py-3 px-4 text-xs font-medium placeholder-zinc-400 focus:bg-white focus:outline-none resize-none"
-                required
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => { setRejectingTaskId(null); setRejectionInputReason(''); }}
-                  className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 font-bold rounded-lg text-xs transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-red-650 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition shadow-md"
-                >
-                  Confirm Reject
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {activeModal === 'faculty_tasks' && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>

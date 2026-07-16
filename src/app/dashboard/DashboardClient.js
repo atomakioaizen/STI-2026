@@ -43,6 +43,21 @@ export default function DashboardClient({ user }) {
   }, [isCalendarOpen]);
 
   useEffect(() => {
+    function handleClickOutsideBell(event) {
+      const container = document.getElementById('bell-notification-dropdown-container');
+      if (container && !container.contains(event.target)) {
+        setShowNotifications(false);
+      }
+    }
+    if (showNotifications) {
+      document.addEventListener('mousedown', handleClickOutsideBell);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutsideBell);
+    };
+  }, [showNotifications]);
+
+  useEffect(() => {
     async function getTasks() {
       try {
         const res = await fetch('/api/tasks?archived=false');
@@ -154,7 +169,7 @@ export default function DashboardClient({ user }) {
               </div>
               <div className="flex items-center gap-2 relative">
                 {/* Notification Dropdown Trigger */}
-                <div className="relative">
+                <div className="relative" id="bell-notification-dropdown-container">
                   <button
                     onClick={() => setShowNotifications(!showNotifications)}
                     className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all active:scale-95 border border-zinc-200 bg-white relative"
