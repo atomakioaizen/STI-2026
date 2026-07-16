@@ -258,9 +258,9 @@ export async function POST(request) {
       userId
     } = await request.json();
 
-    if (!category || !taskDescription || !priority) {
+    if (!category || !taskDescription || !priority || !targetDate) {
       return NextResponse.json(
-        { error: 'Category, description, and priority are required' },
+        { error: 'Category, description, priority, and target date are required' },
         { status: 400 }
       );
     }

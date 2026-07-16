@@ -64,6 +64,19 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
     fetchArchivedTasks();
   }, [statusFilter, priorityFilter]);
 
+  useEffect(() => {
+    if (taskTrigger && setTaskTrigger) {
+      if (taskTrigger.userId === user.id) {
+        if (taskTrigger.status === 'Pending Acceptance') {
+          setNominatedTaskToAction(taskTrigger);
+        } else {
+          handleOpenEdit(taskTrigger);
+        }
+      }
+      setTaskTrigger(null);
+    }
+  }, [taskTrigger]);
+
   async function fetchTasks() {
     setLoading(true);
     try {
@@ -154,8 +167,8 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
 
   const handleCreateTask = async (e) => {
     e.preventDefault();
-    if (!category.trim() || !taskDescription.trim() || !priority) {
-      setFormError('Please fill in Category, Task Description and Priority.');
+    if (!category.trim() || !taskDescription.trim() || !priority || !targetDate) {
+      setFormError('Please fill in Category, Task Description, Priority, and Target Date.');
       return;
     }
 

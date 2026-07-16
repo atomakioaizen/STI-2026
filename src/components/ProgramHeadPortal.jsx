@@ -92,9 +92,17 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
       if (taskTrigger.userId === user.id) {
-        handleOpenEditSelf(taskTrigger);
+        if (taskTrigger.status === 'Pending Acceptance') {
+          setNominatedTaskToAction(taskTrigger);
+        } else {
+          handleOpenEditSelf(taskTrigger);
+        }
       } else {
-        handleOpenReview(taskTrigger);
+        if (taskTrigger.status === 'Rejected') {
+          setForcingTaskId(taskTrigger.id);
+        } else {
+          handleOpenReview(taskTrigger);
+        }
       }
       setTaskTrigger(null);
     }
@@ -350,8 +358,8 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
       });
     };
     const executeCreateSelfTask = async () => {
-    if (!category.trim() || !taskDescription.trim() || !priority) {
-      setFormError('Please fill in Category, Task Description and Priority.');
+    if (!category.trim() || !taskDescription.trim() || !priority || !targetDate) {
+      setFormError('Please fill in Category, Task Description, Priority, and Target Date.');
       return;
     }
 

@@ -402,8 +402,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       });
     };
     const executeAssignTask = async () => {
-    if (!taskCategory.trim() || !taskDescription.trim() || !taskAssigneeId) {
-      setTaskFormError('Category, Description and Assignee are required.');
+    if (!taskCategory.trim() || !taskDescription.trim() || !taskAssigneeId || !taskTargetDate) {
+      setTaskFormError('Category, Description, Assignee, and Target Date are required.');
       return;
     }
 
