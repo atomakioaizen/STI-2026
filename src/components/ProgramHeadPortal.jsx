@@ -531,8 +531,11 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
       {/* Super Alert Modal for Overdue deadlines */}
       {showSuperAlert && (
         <SuperAlertModal 
-          tasks={tasks.filter(t => t.userId === user.id)} 
+          tasks={tasks} 
+          user={user}
           onClose={() => setShowSuperAlert(false)} 
+          onAcceptTask={handleAcceptTaskDirect}
+          onRejectTask={handleRejectTaskDirect}
         />
       )}
 
@@ -719,7 +722,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
 
       {/* Force Task Explanation Modal popup */}
       {forcingTaskId && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">Force Task Assignment</h4>
             <p className="text-xs text-zinc-500 font-medium mb-4 leading-relaxed">Provide an explanation or note (mandatory) explaining why this task is required.</p>
@@ -1016,17 +1019,17 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
                     {myTasks.sort((a, b) => {
-                      let aVal = a[personalSortField];
-                      let bVal = b[personalSortField];
-                      if (personalSortField === 'targetDate') {
+                      let aVal = a[sortField];
+                      let bVal = b[sortField];
+                      if (sortField === 'targetDate') {
                         aVal = aVal ? new Date(aVal).getTime() : Infinity;
                         bVal = bVal ? new Date(bVal).getTime() : Infinity;
                       } else {
                         aVal = aVal ? String(aVal).toLowerCase() : '';
                         bVal = bVal ? String(bVal).toLowerCase() : '';
                       }
-                      if (aVal < bVal) return personalSortDirection === 'asc' ? -1 : 1;
-                      if (aVal > bVal) return personalSortDirection === 'asc' ? 1 : -1;
+                      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+                      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
                       return 0;
                     }).map(task => {
                       const isDelayed = task.status === 'Delayed';
@@ -1569,7 +1572,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
         </div>
       )}
       {customDialog && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">{customDialog.title}</h4>
             <p className="text-xs text-zinc-500 font-medium mb-6 leading-relaxed">{customDialog.message}</p>
@@ -1600,7 +1603,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
 
       {/* Click-routed Nomination Action Modal for PH */}
       {nominatedTaskToAction && (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setNominatedTaskToAction(null)}>
+        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setNominatedTaskToAction(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-4">
               <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{nominatedTaskToAction.category}</span>
