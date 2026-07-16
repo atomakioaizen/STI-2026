@@ -43,6 +43,9 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
   // Edit/Update Modal State
   const [editingTask, setEditingTask] = useState(null);
     const [customDialog, setCustomDialog] = useState(null);
+  const [nominatedTaskToAction, setNominatedTaskToAction] = useState(null);
+  const [rejectionReasonSingle, setRejectionReasonSingle] = useState('');
+  const [submittingRejectSingle, setSubmittingRejectSingle] = useState(false);
   const [rejectingTaskId, setRejectingTaskId] = useState(null);
   const [rejectionInputReason, setRejectionInputReason] = useState(''); // { type: 'confirm'|'alert', title: '', message: '', onConfirm: () => void }
   const triggerConfirm = (title, message, onConfirm) => {

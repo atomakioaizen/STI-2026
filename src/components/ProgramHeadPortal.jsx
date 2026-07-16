@@ -37,6 +37,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [updating, setUpdating] = useState(false);
   const [customDialog, setCustomDialog] = useState(null);
+  const [nominatedTaskToAction, setNominatedTaskToAction] = useState(null);
   const [assignToUserId, setAssignToUserId] = useState('');
   const [forcingTaskId, setForcingTaskId] = useState(null);
   const [rejectingTaskId, setRejectingTaskId] = useState(null);
@@ -1588,6 +1589,53 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger })
           </div>
         </div>
       )}
+
+      {/* Click-routed Nomination Action Modal for PH */}
+      {nominatedTaskToAction && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setNominatedTaskToAction(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start mb-4">
+              <span className="bg-blue-100 text-blue-800 border border-blue-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{nominatedTaskToAction.category}</span>
+              <button onClick={() => setNominatedTaskToAction(null)} className="text-zinc-400 hover:text-zinc-700">✕</button>
+            </div>
+            <h4 className="font-black text-lg text-zinc-900 mb-1">{nominatedTaskToAction.taskDescription}</h4>
+            {nominatedTaskToAction.assignedNote && (
+              <p className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded-lg p-2.5 my-3 font-medium">
+                <span className="font-bold">Supervisor Note:</span> {nominatedTaskToAction.assignedNote}
+              </p>
+            )}
+            <p className="text-xs text-zinc-500 mb-6 font-semibold">Please accept or reject this task assignment.</p>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  await handleAcceptTaskDirect(nominatedTaskToAction.id);
+                  setNominatedTaskToAction(null);
+                }}
+                className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2.5 px-3 rounded-lg shadow-xs transition"
+              >
+                Accept Task
+              </button>
+              <button
+                onClick={() => {
+                  const reason = prompt('Please provide a reason for rejecting this task (mandatory):');
+                  if (reason === null) return;
+                  if (!reason.trim()) {
+                    alert('Reason is required to reject.');
+                    return;
+                  }
+                  handleRejectTaskDirect(nominatedTaskToAction.id, reason.trim());
+                  setNominatedTaskToAction(null);
+                }}
+                className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-bold text-xs py-2.5 px-3 rounded-lg transition"
+              >
+                Reject Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+  
     </>
   );
 }
