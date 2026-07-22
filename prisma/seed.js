@@ -105,7 +105,7 @@ async function main() {
     'Jezel Gevero',
     'Julius Cosio',
     'Maricel Lamban',
-    'Joaquin Villanueva Lll',
+    'Joaquin Villanueva 3rd',
     'Deborah Abbas',
     'Jemuel Abordo'
   ];

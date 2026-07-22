@@ -513,9 +513,9 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
       {/* Greeting Banner */}
       <div className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
         <div>
-          <h2 className="text-2xl font-black text-zinc-900">Mabuhay, {user.name}!</h2>
+          <h2 className="text-2xl font-black text-zinc-900">Mabuhay, {user.name?.replaceAll('Lll', '3rd')}!</h2>
           <p className="text-zinc-500 text-sm mt-1 font-medium">
-            Simpleng portal para sa faculty at staff. Mag-nominate ng tasks at i-update ang progress nang madali.
+            Faculty and Administrative Staff Portal. Nominate tasks, track deliverables, and manage progress updates.
           </p>
         </div>
         <button
