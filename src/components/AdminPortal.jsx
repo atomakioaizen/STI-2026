@@ -4,13 +4,49 @@ import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, AlertTriangle, TrendingUp, 
   List, Search, RefreshCw, Eye, Edit2, Users, FileText,
-  PlusCircle, Download, Plus, Settings, ChevronRight, Archive, ShieldAlert, Calendar
+  PlusCircle, Download, Plus, Settings, ChevronRight, Archive, ShieldAlert, Calendar, Bell, Inbox
 } from 'lucide-react';
 import CalendarView from './CalendarView';
 import InsightsView from './InsightsView';
+import SuperAlertModal from './SuperAlertModal';
+import AssigneeCombobox from './AssigneeCombobox';
 import { exportTasksToExcel } from '@/lib/reports';
+import { getTaskActorInfo } from '@/lib/taskHelpers';
 
-export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
+const renderRemarksLog = (remarksStr) => {
+  if (!remarksStr) return null;
+  try {
+    const parsed = JSON.parse(remarksStr);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return (
+        <div className="mt-1.5 bg-zinc-50 border border-zinc-200 rounded-lg p-2 space-y-1 text-left">
+          <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider block">Activity &amp; Remarks Log</span>
+          <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+            {parsed.map((msg, index) => (
+              <div key={index} className="text-[10px] leading-relaxed text-zinc-700 border-b border-zinc-100 pb-1 last:border-0 last:pb-0">
+                <span className="font-bold text-zinc-800">{msg.sender} ({msg.role}):</span>{" "}
+                <span className="italic font-medium">"{msg.message || msg.content}"</span>
+                <span className="text-[8px] text-zinc-400 block mt-0.5">
+                  {msg.timestamp ? new Date(msg.timestamp).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' }) : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+  } catch (e) {
+    // fallback if it's plain text
+  }
+  return (
+    <div className="mt-1 bg-zinc-50 border border-zinc-200 rounded-lg p-2 text-left">
+      <span className="text-[9px] font-black text-zinc-500 uppercase tracking-wider block">Remarks</span>
+      <p className="text-[10px] text-zinc-700 italic">"{remarksStr}"</p>
+    </div>
+  );
+};
+
+export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notifications = [], onDeleteNotification, refreshDashboard }) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [users, setUsers] = useState([]);
@@ -21,19 +57,26 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
 
   // Active Modals / Views
   const [activeModal, setActiveModal] = useState(null); // 'tasks' | 'users' | 'departments' | 'calendar' | 'insights' | 'archive' | 'nominate'
+  const [showSuperAlert, setShowSuperAlert] = useState(true);
 
   const getVal = (obj, path) => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
   };
 
-  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY_STAFF: 1 };
+  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY: 1, STAFF: 1, FACULTY_STAFF: 1 };
   const userLevel = ROLE_LEVELS[user.role] || 0;
   const availableRoles = [
-    { value: 'FACULTY_STAFF', label: 'Faculty / Staff', level: 1 },
+    { value: 'FACULTY', label: 'Faculty (Academic)', level: 1 },
+    { value: 'STAFF', label: 'Administrative Staff', level: 1 },
     { value: 'PROGRAM_HEAD', label: 'Program Head', level: 2 },
     { value: 'PRINCIPAL', label: 'Principal', level: 3 },
     { value: 'SCHOOL_ADMIN', label: 'School Admin', level: 4 }
-  ].filter(r => r.level < userLevel);
+  ].filter(r => {
+    if (r.level >= userLevel) return false;
+    // Principal level account cannot create or manage Administrative Staff
+    if (user.role === 'PRINCIPAL' && r.value === 'STAFF') return false;
+    return true;
+  });
 
   // User Accounts UI States
   const [showCreateAccountForm, setShowCreateAccountForm] = useState(false);
@@ -68,6 +111,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
   const [deptSortDirection, setDeptSortDirection] = useState('asc');
   const [archiveSortField, setArchiveSortField] = useState('updatedAt');
   const [archiveSortDirection, setArchiveSortDirection] = useState('desc');
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveMonthFilter, setArchiveMonthFilter] = useState('All');
+  const [archiveYearFilter, setArchiveYearFilter] = useState('All');
+  const [archiveCurrentPage, setArchiveCurrentPage] = useState(1);
 
 
   // Task Assignment States
@@ -75,16 +122,42 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
   const [taskDescription, setTaskDescription] = useState('');
   const [taskPriority, setTaskPriority] = useState('Medium');
   const [taskTargetDate, setTaskTargetDate] = useState('');
+  const [taskNominationPeriod, setTaskNominationPeriod] = useState('weekly');
   const [taskAssigneeId, setTaskAssigneeId] = useState('');
+  const [taskAssigneeIds, setTaskAssigneeIds] = useState([]);
   const [taskFormError, setTaskFormError] = useState('');
   const [taskSubmitting, setTaskSubmitting] = useState(false);
+
+  // Auto-calculate target date based on nomination period
+  useEffect(() => {
+    const now = new Date();
+    if (taskNominationPeriod === 'weekly') {
+      const day = now.getDay();
+      const diff = 6 - day;
+      const saturday = new Date(now);
+      saturday.setDate(now.getDate() + diff);
+      setTaskTargetDate(saturday.toISOString().split('T')[0]);
+    } else if (taskNominationPeriod === 'monthly') {
+      const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+      setTaskTargetDate(endOfMonth.toISOString().split('T')[0]);
+    } else if (taskNominationPeriod === 'yearly') {
+      const endOfYear = new Date(now.getFullYear(), 11, 31);
+      setTaskTargetDate(endOfYear.toISOString().split('T')[0]);
+    } else if (taskNominationPeriod === 'custom') {
+      setTaskTargetDate('');
+    }
+  }, [taskNominationPeriod]);
 
   // Task Review States
   const [reviewingTask, setReviewingTask] = useState(null);
   const [reviewProgress, setReviewProgress] = useState(0);
   const [reviewStatus, setReviewStatus] = useState('Ongoing');
   const [reviewRemarks, setReviewRemarks] = useState('');
+  const [reviewEvidenceLink, setReviewEvidenceLink] = useState('');
   const [reviewUpdating, setReviewUpdating] = useState(false);
+
+  // Department Members Inspection State
+  const [selectedDeptMembers, setSelectedDeptMembers] = useState(null);
 
   // Edit User States
   const [editingUser, setEditingUser] = useState(null);
@@ -137,6 +210,9 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks);
+        if (refreshDashboard) {
+          refreshDashboard();
+        }
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -228,9 +304,14 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
           if (res.ok) {
             fetchUsers();
             fetchTasks();
+            triggerAlert('Account Deleted', 'The user account has been successfully deleted.');
+          } else {
+            const data = await res.json();
+            triggerAlert('Deletion Error', data.error || 'Failed to delete account.');
           }
         } catch (err) {
           console.error(err);
+          triggerAlert('Error', 'Connection error while deleting account.');
         }
       }
     });
@@ -246,9 +327,14 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
           if (res.ok) {
             fetchDepartments();
             fetchUsers();
+            triggerAlert('Department Deleted', 'The department has been successfully deleted.');
+          } else {
+            const data = await res.json();
+            triggerAlert('Deletion Error', data.error || 'Failed to delete department.');
           }
         } catch (err) {
           console.error(err);
+          triggerAlert('Error', 'Connection error while deleting department.');
         }
       }
     });
@@ -261,7 +347,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       });
     };
     const executeCreateUser = async () => {
-    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPassword || !newUserDeptId) {
+    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPassword || (newUserRole !== 'PRINCIPAL' && !newUserDeptId)) {
       setUserFormError('All fields except Position are required.');
       return;
     }
@@ -279,7 +365,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
           password: newUserPassword,
           position: newUserPosition.trim(),
           role: newUserRole,
-          departmentId: parseInt(newUserDeptId, 10)
+          departmentId: newUserRole === 'PRINCIPAL' ? null : parseInt(newUserDeptId, 10)
         })
       });
 
@@ -307,7 +393,13 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
     setEditUserUsername(targetUser.username);
     setEditUserPassword('');
     setEditUserPosition(targetUser.position || '');
-    setEditUserRole(targetUser.role);
+    
+    let effectiveRole = targetUser.role;
+    if (effectiveRole === 'FACULTY_STAFF') {
+      const deptName = targetUser.department?.name;
+      effectiveRole = (deptName === 'Admin') ? 'STAFF' : 'FACULTY';
+    }
+    setEditUserRole(effectiveRole);
     setEditUserDeptId(targetUser.departmentId ? targetUser.departmentId.toString() : '');
     setEditUserError('');
   };
@@ -402,8 +494,12 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       });
     };
     const executeAssignTask = async () => {
-    if (!taskCategory.trim() || !taskDescription.trim() || !taskAssigneeId || !taskTargetDate) {
-      setTaskFormError('Category, Description, Assignee, and Target Date are required.');
+    const selectedIds = taskAssigneeIds.length > 0 
+      ? taskAssigneeIds 
+      : (taskAssigneeId ? [parseInt(taskAssigneeId, 10)] : []);
+
+    if (!taskCategory.trim() || !taskDescription.trim() || selectedIds.length === 0 || !taskTargetDate) {
+      setTaskFormError('Category, Description, Assignee(s), and Target Date are required.');
       return;
     }
 
@@ -420,7 +516,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
           priority: taskPriority,
           targetDate: taskTargetDate ? new Date(taskTargetDate).toISOString() : null,
           progress: 0,
-          userId: parseInt(taskAssigneeId, 10)
+          userIds: selectedIds
         })
       });
 
@@ -428,6 +524,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         setTaskCategory('');
         setTaskDescription('');
         setTaskTargetDate('');
+        setTaskAssigneeIds([]);
+        setTaskNominationPeriod('weekly');
         setActiveModal(null);
         fetchTasks();
         triggerAlert('Assignment Successful', 'The deliverable has been successfully assigned and logged!');
@@ -444,9 +542,25 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
 
   const handleOpenReview = (task) => {
     setReviewingTask(task);
-    setReviewProgress(task.progress);
-    setReviewStatus(task.status);
-    setReviewRemarks(task.remarks || '');
+    setReviewProgress(task.progress || 0);
+    setReviewStatus(task.status || 'Ongoing');
+    setReviewRemarks('');
+    setReviewEvidenceLink(task.evidenceLink || '');
+  };
+
+  const handleRequestDeletion = async (taskId) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        fetchTasks();
+        fetchArchivedTasks();
+        triggerAlert('Task Deleted', 'Task deliverable permanently deleted.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleUpdateTaskReview = async (e) => {
@@ -465,6 +579,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         body: JSON.stringify({
           progress: reviewProgress,
           status: reviewStatus,
+          evidenceLink: reviewEvidenceLink.trim(),
           remarks: reviewRemarks.trim()
         })
       });
@@ -473,6 +588,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         setReviewingTask(null);
         fetchTasks();
         fetchArchivedTasks();
+        triggerAlert('Task Updated', 'Task progress updated successfully.');
+      } else {
+        const data = await res.json();
+        triggerAlert('Error', data.error || 'Failed to update task.');
       }
     } catch (err) {
       console.error('Error reviewing task', err);
@@ -509,7 +628,23 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       }
     };
     
-    const handleForceTaskSubmit = async (e) => {
+  const handleForceTaskDirect = async (taskId, note) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Ongoing', assignedNote: note })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Forced', 'Task has been successfully pushed and made active.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleForceTaskSubmit = async (e) => {
     e.preventDefault();
     if (!forceNoteInput.trim()) {
       triggerAlert('Required', 'Please provide a note/explanation for forcing this task.');
@@ -519,16 +654,98 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
     const note = forceNoteInput.trim();
     setForcingTaskId(null);
     setForceNoteInput('');
+    await handleForceTaskDirect(tId, note);
+  };
 
+  const handleAcceptTaskAdmin = async (taskId) => {
     try {
-      const res = await fetch(`/api/tasks/${tId}`, {
+      const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Not Started', assignedNote: note })
+        body: JSON.stringify({ status: 'Ongoing' })
       });
       if (res.ok) {
         fetchTasks();
-        triggerAlert('Task Forced', 'Task has been successfully pushed and made active.');
+        triggerAlert('Task Accepted', 'Task has been successfully accepted and added to your active deliverables.');
+      } else {
+        const data = await res.json();
+        triggerAlert('Error', data.error || 'Failed to accept task.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectTaskAdmin = async (taskId, reason) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected', rejectionReason: reason })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Task Rejected', 'Task rejected.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleApproveDeletion = async (taskId) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Deletion Approved', 'Task deleted.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectDeletion = async (taskId, reason) => {
+    const finalReason = reason || reviewRemarks;
+    if (!finalReason || !finalReason.trim()) {
+      triggerAlert('Remarks Required', 'Please enter a reason before rejecting this deletion request.');
+      return;
+    }
+    triggerConfirm('Reject Deletion Request', 'Are you sure you want to reject this deletion request? This will notify the assignee.', async () => {
+      try {
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Rejected', remarks: finalReason.trim() })
+        });
+        if (res.ok) {
+          setReviewingTask(null);
+          setReviewRemarks('');
+          fetchTasks();
+          triggerAlert('Deletion Rejected', 'Deletion request rejected. Task marked as Rejected.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    });
+  };
+
+  const handleApproveUpdate = async (taskId) => {
+    try {
+      const taskRes = await fetch(`/api/tasks`);
+      if (taskRes.ok) {
+        const data = await taskRes.json();
+        const task = data.tasks.find(t => t.id === taskId);
+        if (task) {
+          const res = await fetch(`/api/tasks/${taskId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: task.progress === 100 ? 'Completed' : 'Ongoing' })
+          });
+          if (res.ok) {
+            fetchTasks();
+            triggerAlert('Update Approved', 'Progress update approved.');
+          }
+        }
       }
     } catch (err) {
       console.error(err);
@@ -541,6 +758,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
         if (res.ok) {
           fetchTasks();
+          setReviewingTask(null);
           triggerAlert('Task Cancelled', 'Nomination was successfully cancelled.');
         }
       } catch (err) {
@@ -562,9 +780,41 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
     }
   };
 
+  const delayedCount = tasks.filter(t => t.status === 'Delayed').length;
+  const awaitingApprovalCount = tasks.filter(t => t.status === 'Awaiting Approval').length;
+  const awaitingDeletionCount = tasks.filter(t => t.status === 'Awaiting Deletion').length;
+  const totalWarnings = delayedCount + awaitingApprovalCount + awaitingDeletionCount;
+
   return (
     <>
       <div className="space-y-8 animate-fadeIn text-zinc-950">
+
+      {/* Super Warning alert popup if urgent */}
+      {showSuperAlert && (
+        <SuperAlertModal 
+          tasks={tasks}
+          user={user}
+          onClose={() => setShowSuperAlert(false)}
+          onAcceptTask={handleAcceptTaskAdmin}
+          onRejectTask={handleRejectTaskAdmin}
+          onCancelTask={handleCancelAdminNominatedTask}
+          onForceTask={handleForceTaskDirect}
+          onAcceptDelete={(taskId, isDeletion) => isDeletion ? handleApproveDeletion(taskId) : handleApproveUpdate(taskId)}
+          onRejectDelete={(taskId, reason) => handleRejectDeletion(taskId, reason)}
+          onTaskClick={(task) => {
+            setShowSuperAlert(false);
+            if (task.userId === user.id) {
+              handleOpenReview(task);
+            } else {
+              handleOpenReview(task);
+            }
+          }}
+          onRefresh={fetchTasks}
+          refreshDashboard={refreshDashboard}
+          notifications={notifications}
+          onDeleteNotification={onDeleteNotification}
+        />
+      )}
       
       {/* Greetings Banner */}
       <div className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
@@ -588,7 +838,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         
         {/* Card 1: Task Nominations */}
         <button
-          onClick={() => setActiveModal('tasks')}
+          onClick={() => {
+            setSelectedUserFilter('All');
+            setActiveModal('tasks');
+          }}
           className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
         >
           <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition inline-block">
@@ -604,6 +857,42 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
             Open Tasks List →
           </span>
         </button>
+
+        {/* Card: My Self Nominations */}
+        {(() => {
+          const mySelfTasks = tasks.filter(t => Number(t.userId) === Number(user.id) && !t.archived && t.status !== 'Completed');
+          return (
+            <button
+              onClick={() => {
+                setSelectedUserFilter(user.id.toString());
+                setActiveModal('tasks');
+              }}
+              className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-indigo-500 rounded-2xl p-6 text-left shadow-sm transition group flex flex-col justify-between"
+            >
+              <div className="flex justify-between items-start w-full">
+                <div className="p-3 bg-indigo-50 rounded-xl group-hover:bg-indigo-100 transition inline-block">
+                  <PlusCircle className="h-6 w-6 text-indigo-600" />
+                </div>
+                {mySelfTasks.length > 0 && (
+                  <span className="bg-indigo-100 text-indigo-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-indigo-200">
+                    {mySelfTasks.length} Active
+                  </span>
+                )}
+              </div>
+              <div>
+                <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-indigo-600 transition">
+                  My Self Nominations
+                </h3>
+                <p className="text-xs text-zinc-500 font-semibold mt-1">
+                  View and manage your own personal tasks and deliverables.
+                </p>
+              </div>
+              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-indigo-600">
+                View My Tasks ({mySelfTasks.length}) →
+              </span>
+            </button>
+          );
+        })()}
 
         {/* Card 2: Manage Users */}
         <button
@@ -643,7 +932,33 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
           </span>
         </button>
 
-
+        {/* Card 4: Important Notices */}
+        <button
+          onClick={() => setActiveModal('notifications')}
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-500 rounded-2xl p-6 text-left shadow-sm transition group flex flex-col justify-between min-h-[200px] hover:shadow-md"
+        >
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition inline-block">
+              <Bell className="h-6 w-6 text-red-600" />
+            </div>
+            {totalWarnings > 0 && (
+              <span className="bg-red-100 text-red-850 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
+                {totalWarnings} Warnings
+              </span>
+            )}
+          </div>
+          <div>
+            <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-red-600 transition">
+              Important Notices
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-1">
+              Check overdue alerts, warning flags, or pending approvals.
+            </p>
+          </div>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-red-600">
+            Open Alerts →
+          </span>
+        </button>
 
         {/* Card 5: Archive */}
         <button
@@ -692,44 +1007,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
 
       {/* Audit Logs Insight Modal */}
-      {/* Rejected Task alerts */}
-      {tasks.filter(t => t.status === 'Rejected' && t.nominatedById === user.id).length > 0 && (
-        <div className="mb-6 p-5 bg-gradient-to-r from-red-50 to-orange-50 border border-red-200 rounded-2xl shadow-xs">
-          <h4 className="font-extrabold text-red-800 text-sm mb-1 uppercase tracking-wide">Rejected Deliverable Nominations</h4>
-          <p className="text-xs text-zinc-500 mb-4 font-medium">The following tasks you assigned were rejected by the assignees. Review their reasons and push/force or cancel the task.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {tasks.filter(t => t.status === 'Rejected' && t.nominatedById === user.id).map(t => (
-              <div key={t.id} className="p-4 bg-white border border-red-150 rounded-xl flex flex-col justify-between shadow-3xs">
-                <div>
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <span className="bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{t.category}</span>
-                    <span className="text-[10px] text-zinc-400 font-bold">Assignee: {t.user?.name}</span>
-                  </div>
-                  <p className="font-bold text-zinc-900 text-sm mb-1">{t.taskDescription}</p>
-                  <div className="p-2.5 bg-red-50/50 rounded-lg border border-red-100/50 mb-3 mt-2">
-                    <p className="text-[10px] text-zinc-400 font-black uppercase tracking-wider mb-0.5">Rejection Reason</p>
-                    <p className="text-xs text-red-700 italic font-bold">"{t.rejectionReason}"</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 border-t border-zinc-50 pt-3">
-                  <button
-                    onClick={() => setForcingTaskId(t.id)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-3 rounded-lg shadow-xs transition"
-                  >
-                    Force / Push Task
-                  </button>
-                  <button
-                    onClick={() => handleCancelAdminNominatedTask(t.id)}
-                    className="flex-1 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 border border-zinc-200 font-bold text-xs py-2 px-3 rounded-lg transition"
-                  >
-                    Cancel Task
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Force Task Explanation Modal popup */}
       {forcingTaskId && (
@@ -877,6 +1155,19 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                 </button>
                 <button
                   onClick={() => {
+                    if (sortField === 'status') {
+                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortField('status');
+                      setSortDirection('asc');
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded font-bold border transition ${sortField === 'status' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'}`}
+                >
+                  📌 Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </button>
+                <button
+                  onClick={() => {
                     if (sortField === 'priority') {
                       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
                     } else {
@@ -912,7 +1203,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200">
-                      {[...tasks].sort((a, b) => {
+                      {[...tasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
                         let aVal = sortField.includes('.') ? getVal(a, sortField) : a[sortField];
                         let bVal = sortField.includes('.') ? getVal(b, sortField) : b[sortField];
                         if (sortField === 'targetDate') {
@@ -926,51 +1217,93 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                         if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
                         return 0;
                       }).map((task, idx) => {
-                      const isDelayed = task.status === 'Delayed';
-                      const isCompleted = task.status === 'Completed';
+                        const isDelayed = task.status === 'Delayed';
+                        const isCompleted = task.status === 'Completed';
 
-                      let statusColor = 'text-yellow-800 bg-yellow-100 border-yellow-200';
-                      if (isCompleted) statusColor = 'text-green-800 bg-green-100 border-green-200';
-                      if (isDelayed) statusColor = 'text-red-800 bg-red-100 border-red-200';
-                      if (task.status === 'Not Started') statusColor = 'text-zinc-600 bg-zinc-100 border-zinc-200';
-                      if (task.status === 'Awaiting Approval') statusColor = 'text-purple-800 bg-purple-100 border-purple-200';
-                      if (task.status === 'Awaiting Deletion') statusColor = 'text-orange-800 bg-orange-100 border-orange-200';
+                        let statusColor = 'text-yellow-800 bg-yellow-100 border-yellow-200';
+                        if (isCompleted) statusColor = 'text-green-800 bg-green-100 border-green-200';
+                        if (isDelayed) statusColor = 'text-red-800 bg-red-100 border-red-200';
+                        if (task.status === 'Not Started') statusColor = 'text-zinc-600 bg-zinc-100 border-zinc-200';
+                        if (task.status === 'Awaiting Approval') {
+                          if (task.progress === 0 && task.previousProgress === null) {
+                            statusColor = 'text-blue-800 bg-blue-100 border-blue-200';
+                          } else {
+                            statusColor = 'text-purple-800 bg-purple-100 border-purple-200';
+                          }
+                        }
+                        if (task.status === 'Awaiting Deletion') statusColor = 'text-orange-850 bg-orange-100 border-orange-200';
 
-                      let prioColor = 'text-zinc-700 bg-zinc-100';
-                      if (task.priority === 'High') prioColor = 'text-red-700 bg-red-100';
-                      if (task.priority === 'Medium') prioColor = 'text-yellow-700 bg-yellow-100';
+                        let prioColor = 'text-zinc-700 bg-zinc-100';
+                        if (task.priority === 'High') prioColor = 'text-red-700 bg-red-100';
+                        if (task.priority === 'Medium') prioColor = 'text-yellow-700 bg-yellow-100';
 
-                      return (
-                        <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition border-b border-zinc-200`}>
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-bold text-zinc-800">{task.user?.name}</p>
-                              <p className="text-[10px] text-zinc-400 font-bold">{task.user?.department?.name || 'No Dept'}</p>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 max-w-sm">
-                            <div>
-                              <span className="bg-blue-50 border border-blue-200 rounded px-2 py-0.5 text-[9px] font-bold text-blue-700 uppercase">
-                                {task.category}
+                        return (
+                          <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition border-b border-zinc-200`}>
+                            <td className="py-4 px-4">
+                              <div>
+                                <p className="font-bold text-zinc-800">{task.user?.name}</p>
+                                <p className="text-[10px] text-zinc-400 font-bold">{task.user?.department?.name || 'No Dept'}</p>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 max-w-sm">
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="bg-blue-50 border border-blue-200/80 rounded px-1.5 py-0.5 text-[9px] font-bold text-blue-700 uppercase tracking-wider">
+                                    {task.category}
+                                  </span>
+                                  <span className="font-bold text-zinc-950 text-xs">{task.taskDescription}</span>
+                                </div>
+                                {/* Actor Labels */}
+                                <div className="flex flex-wrap items-center gap-1 mt-1 text-[9px] leading-tight">
+                                  {task.nominatedBy?.name ? (
+                                    <span className="bg-blue-50/80 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                      👤 Nominated: {task.nominatedBy.name}
+                                    </span>
+                                  ) : (
+                                    <span className="bg-zinc-100 text-zinc-600 border border-zinc-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                      Self-Nominated
+                                    </span>
+                                  )}
+                                  {(() => {
+                                    const actorInfo = getTaskActorInfo(task);
+                                    return (
+                                      <>
+                                        {actorInfo.coAssignees && (
+                                          <span className="bg-indigo-50/80 text-indigo-700 border border-indigo-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                            👥 Co-assigned: {actorInfo.coAssignees}
+                                          </span>
+                                        )}
+                                        {actorInfo.lastActionBy && (
+                                          <span className={`border px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5 ${
+                                            actorInfo.lastActionType === 'Approved' ? 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60'
+                                            : actorInfo.lastActionType === 'Rejected' ? 'bg-red-50/80 text-red-700 border-red-200/60'
+                                            : 'bg-purple-50/80 text-purple-700 border-purple-200/60'
+                                          }`}>
+                                            {actorInfo.lastActionType}: {actorInfo.lastActionBy}
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 text-zinc-500 font-semibold">
+                              {task.targetDate ? new Date(task.targetDate).toLocaleDateString() : 'No Target'}
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={`inline-block rounded px-2 py-0.5 font-bold ${prioColor}`}>
+                                {task.priority}
                               </span>
-                              <p className="font-bold text-zinc-950 mt-1">{task.taskDescription}</p>
-                              {task.remarks && <p className="text-zinc-500 italic mt-0.5 text-xxs">Remarks: {task.remarks}</p>}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-zinc-500 font-semibold">
-                            {task.targetDate ? new Date(task.targetDate).toLocaleDateString() : 'No Target'}
-                          </td>
-                          <td className="py-4 px-4">
-                            <span className={`inline-block rounded px-2 py-0.5 font-bold ${prioColor}`}>
-                              {task.priority}
-                            </span>
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="flex flex-col gap-1 w-24">
-                              <div className="flex justify-between items-center font-bold">
-                                <span className={`rounded border px-1.5 py-0.2 text-[9px] ${statusColor}`}>
-                                  {task.status}
-                                </span>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex flex-col gap-1 w-24">
+                                <div className="flex justify-between items-center font-bold">
+                                  <span className={`rounded border px-1.5 py-0.2 text-[9px] ${statusColor}`}>
+                                    {task.status === 'Awaiting Approval' ? (
+                                      task.progress === 0 && task.previousProgress === null ? 'Awaiting Nomination Approval' : 'Awaiting Progress Approval'
+                                    ) : task.status}
+                                  </span>
                                 <span className="text-zinc-500">{task.progress}%</span>
                               </div>
                               <div className="w-full bg-zinc-100 rounded-full h-1.5 overflow-hidden">
@@ -1009,7 +1342,17 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
               </h3>
               <div className="flex gap-2">
                 <button
-                  onClick={() => setShowCreateAccountForm(!showCreateAccountForm)}
+                  onClick={() => {
+                    const nextState = !showCreateAccountForm;
+                    setShowCreateAccountForm(nextState);
+                    if (nextState) {
+                      setNewUserName('');
+                      setNewUserUsername('');
+                      setNewUserPassword('');
+                      setNewUserPosition('');
+                      setUserFormError('');
+                    }
+                  }}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-lg text-xs font-bold shadow transition flex items-center gap-1"
                 >
                   {showCreateAccountForm ? 'Cancel' : <><Plus className="h-4 w-4" /> Add Account</>}
@@ -1036,7 +1379,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                   {userFormError}
                 </div>
               )}
-              <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-5 gap-3" autoComplete="off">
                 <input
                   type="text"
                   placeholder="Full Name (e.g. John Doe)"
@@ -1050,6 +1393,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                   placeholder="Username (e.g. jdoe)"
                   value={newUserUsername}
                   onChange={(e) => setNewUserUsername(e.target.value)}
+                  autoComplete="off"
+                  name="new_user_username_clean"
                   className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
                   required
                 />
@@ -1058,6 +1403,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                   placeholder="Password"
                   value={newUserPassword}
                   onChange={(e) => setNewUserPassword(e.target.value)}
+                  autoComplete="new-password"
+                  name="new_user_password_clean"
                   className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
                   required
                 />
@@ -1070,8 +1417,22 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                 />
                 <select
                   value={newUserRole}
-                  onChange={(e) => setNewUserRole(e.target.value)}
-                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
+                  onChange={(e) => {
+                    const selectedRole = e.target.value;
+                    setNewUserRole(selectedRole);
+                    if (selectedRole === 'PRINCIPAL') {
+                      setNewUserDeptId('');
+                    } else {
+                      const filtered = departments.filter(d => {
+                        if (selectedRole === 'STAFF') return d.name === 'Admin';
+                        return d.name !== 'Admin';
+                      });
+                      if (filtered.length > 0) {
+                        setNewUserDeptId(filtered[0].id.toString());
+                      }
+                    }
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none"
                 >
                   {availableRoles.map(r => (
                     <option key={r.value} value={r.value}>{r.label}</option>
@@ -1080,15 +1441,30 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
 
                 <div className="md:col-span-4 flex items-center gap-2">
                   <span className="text-zinc-500 font-bold text-xs uppercase">Dept:</span>
-                  <select
-                    value={newUserDeptId}
-                    onChange={(e) => setNewUserDeptId(e.target.value)}
-                    className="flex-1 rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
-                  >
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  {newUserRole === 'PRINCIPAL' ? (
+                    <select
+                      disabled
+                      className="flex-1 rounded-lg border border-zinc-200 bg-zinc-100 py-1.5 px-3 text-xs font-bold text-zinc-400 cursor-not-allowed select-none"
+                    >
+                      <option value="">N/A (All Academic Programs)</option>
+                    </select>
+                  ) : (
+                    <select
+                      value={newUserDeptId}
+                      onChange={(e) => setNewUserDeptId(e.target.value)}
+                      className="flex-1 rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none"
+                    >
+                      {departments.filter(d => {
+                        if (newUserRole === 'STAFF') {
+                          return d.name === 'Admin';
+                        } else {
+                          return d.name !== 'Admin';
+                        }
+                      }).map(d => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 <button
@@ -1221,7 +1597,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                 <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider select-none">
                   <tr>
                     <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { deptSortField === 'name' ? setDeptSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setDeptSortField('name'), setDeptSortDirection('asc')); }}>Department Name {deptSortField === 'name' ? (deptSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
-                    <th className="py-2.5 px-4 text-center cursor-pointer hover:bg-zinc-100 transition" onClick={() => { deptSortField === 'id' ? setDeptSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setDeptSortField('id'), setDeptSortDirection('asc')); }}>ID {deptSortField === 'id' ? (deptSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                    <th className="py-2.5 px-4 text-center">Assigned Members</th>
                     <th className="py-2.5 px-4 text-right">Action</th>
                   </tr>
                 </thead>
@@ -1232,22 +1608,34 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                     if (av < bv) return deptSortDirection === 'asc' ? -1 : 1;
                     if (av > bv) return deptSortDirection === 'asc' ? 1 : -1;
                     return 0;
-                  }).map((d, idx) => (
-                    <tr key={d.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50`}>
-                      <td className="py-2.5 px-4 font-bold text-zinc-800">{d.name}</td>
-                      <td className="py-2.5 px-4 text-center text-zinc-450 font-semibold">{d.id}</td>
-                      <td className="py-2.5 px-4 text-right">
-                        {d.name !== 'Admin' && (
+                  }).map((d, idx) => {
+                    const assignedUsers = users.filter(u => u.departmentId === d.id);
+                    return (
+                      <tr key={d.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50`}>
+                        <td className="py-2.5 px-4 font-bold text-zinc-800">{d.name}</td>
+                        <td className="py-2.5 px-4 text-center">
                           <button
-                            onClick={() => handleDeleteDepartment(d.id)}
-                            className="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 font-bold"
+                            onClick={() => setSelectedDeptMembers({ dept: d, members: assignedUsers })}
+                            className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-700 font-extrabold px-3 py-1 rounded-full text-xs transition active:scale-95 flex items-center gap-1.5 mx-auto"
+                            title="Click to view assigned personnel"
                           >
-                            Delete
+                            <Users className="h-3.5 w-3.5" />
+                            {assignedUsers.length} {assignedUsers.length === 1 ? 'Member' : 'Members'}
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="py-2.5 px-4 text-right">
+                          {d.name !== 'Admin' && (
+                            <button
+                              onClick={() => handleDeleteDepartment(d.id)}
+                              className="text-[10px] bg-red-50 hover:bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200 font-bold"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1272,50 +1660,123 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                   Manual access to inspect completed accomplishments. Kept clean from active workspaces.
                 </p>
               </div>
-              <button 
-                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
-                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
-              >
-                Close
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                <div className="flex items-center gap-2">
+                  <select
+                    onChange={(e) => { if (e.target.value) { handleExport(e.target.value); e.target.value = ''; } }}
+                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer shadow-sm hover:border-purple-300 transition"
+                  >
+                    <option value="">📊 Export Excel Report</option>
+                    <option value="weekly">Weekly Report</option>
+                    <option value="monthly">Monthly Report</option>
+                    <option value="yearly">Yearly Report</option>
+                    <option value="all">All Tasks</option>
+                  </select>
+                  <button 
+                    onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
+                    className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
 
-            {loadingArchive ? (
-              <div className="text-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 mx-auto"></div>
+              {/* Filtering Controls */}
+            <div className="bg-zinc-50 border-b border-zinc-100 p-4 shrink-0 space-y-3">
+              <div className="flex flex-col md:flex-row gap-3">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+                  <input
+                    type="text"
+                    placeholder="Search archive by description, category, owner..."
+                    value={archiveSearch}
+                    onChange={(e) => { setArchiveSearch(e.target.value); setArchiveCurrentPage(1); }}
+                    className="w-full bg-white border border-zinc-200 rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-purple-500 font-medium"
+                  />
+                </div>
+                <div className="w-full md:w-40">
+                  <select
+                    value={archiveYearFilter}
+                    onChange={(e) => { setArchiveYearFilter(e.target.value); setArchiveCurrentPage(1); }}
+                    className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-purple-500 font-bold"
+                  >
+                    <option value="All">All Years</option>
+                    {Array.from(new Set(archivedTasks.map(t => new Date(t.updatedAt || t.createdAt).getFullYear()))).sort((a,b)=>b-a).map(y => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="w-full md:w-40">
+                  <select
+                    value={archiveMonthFilter}
+                    onChange={(e) => { setArchiveMonthFilter(e.target.value); setArchiveCurrentPage(1); }}
+                    className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-purple-500 font-bold"
+                  >
+                    <option value="All">All Months</option>
+                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, idx) => (
+                      <option key={m} value={idx.toString()}>{m}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            ) : archivedTasks.length === 0 ? (
-              <div className="text-center py-16 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl">
-                No archived deliverables found.
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[60vh]">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider select-none">
-                    <tr>
-                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.name'), setArchiveSortDirection('asc')); }}>Owner {archiveSortField === 'user.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
-                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.department.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.department.name'), setArchiveSortDirection('asc')); }}>Department {archiveSortField === 'user.department.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
-                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'taskDescription' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('taskDescription'), setArchiveSortDirection('asc')); }}>Task Details {archiveSortField === 'taskDescription' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
-                      <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'updatedAt' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('updatedAt'), setArchiveSortDirection('asc')); }}>Completion Date {archiveSortField === 'updatedAt' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
-                      <th className="py-2.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200">
-                    {archivedTasks.sort((a, b) => {
-                      let aVal = archiveSortField.includes('.') ? getVal(a, archiveSortField) : a[archiveSortField];
-                      let bVal = archiveSortField.includes('.') ? getVal(b, archiveSortField) : b[archiveSortField];
-                      if (archiveSortField === 'updatedAt') {
-                        aVal = aVal ? new Date(aVal).getTime() : 0;
-                        bVal = bVal ? new Date(bVal).getTime() : 0;
-                      } else {
-                        aVal = aVal ? String(aVal).toLowerCase() : '';
-                        bVal = bVal ? String(bVal).toLowerCase() : '';
-                      }
-                      if (aVal < bVal) return archiveSortDirection === 'asc' ? -1 : 1;
-                      if (aVal > bVal) return archiveSortDirection === 'asc' ? 1 : -1;
-                      return 0;
-                    }).map((t, idx) => (
+            </div>
+
+            {(() => {
+              const filteredArchive = archivedTasks.filter(t => {
+                if (archiveSearch.trim() !== '') {
+                  const query = archiveSearch.toLowerCase();
+                  const desc = t.taskDescription?.toLowerCase() || '';
+                  const cat = t.category?.toLowerCase() || '';
+                  const owner = t.user?.name?.toLowerCase() || '';
+                  if (!desc.includes(query) && !cat.includes(query) && !owner.includes(query)) return false;
+                }
+                if (archiveMonthFilter !== 'All') {
+                  const month = new Date(t.updatedAt || t.createdAt).getMonth();
+                  if (month !== parseInt(archiveMonthFilter, 10)) return false;
+                }
+                if (archiveYearFilter !== 'All') {
+                  const year = new Date(t.updatedAt || t.createdAt).getFullYear();
+                  if (year !== parseInt(archiveYearFilter, 10)) return false;
+                }
+                return true;
+              });
+
+              return (
+                <div className="flex-1 min-h-0 overflow-y-auto p-6">
+                {loadingArchive ? (
+                  <div className="text-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 mx-auto"></div>
+                  </div>
+                ) : filteredArchive.length === 0 ? (
+                  <div className="text-center py-16 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl">
+                    No archived deliverables found matching criteria.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[60vh]">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider select-none">
+                        <tr>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.name'), setArchiveSortDirection('asc')); }}>Owner {archiveSortField === 'user.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.department.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.department.name'), setArchiveSortDirection('asc')); }}>Department {archiveSortField === 'user.department.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'taskDescription' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('taskDescription'), setArchiveSortDirection('asc')); }}>Task Details {archiveSortField === 'taskDescription' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'updatedAt' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('updatedAt'), setArchiveSortDirection('asc')); }}>Completion Date {archiveSortField === 'updatedAt' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200">
+                        {filteredArchive.sort((a, b) => {
+                          let aVal = archiveSortField.includes('.') ? getVal(a, archiveSortField) : a[archiveSortField];
+                          let bVal = archiveSortField.includes('.') ? getVal(b, archiveSortField) : b[archiveSortField];
+                          if (archiveSortField === 'updatedAt') {
+                            aVal = aVal ? new Date(aVal).getTime() : 0;
+                            bVal = bVal ? new Date(bVal).getTime() : 0;
+                          } else {
+                            aVal = aVal ? String(aVal).toLowerCase() : '';
+                            bVal = bVal ? String(bVal).toLowerCase() : '';
+                          }
+                          if (aVal < bVal) return archiveSortDirection === 'asc' ? -1 : 1;
+                          if (aVal > bVal) return archiveSortDirection === 'asc' ? 1 : -1;
+                          return 0;
+                        }).map((t, idx) => (
                       <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition border-b border-zinc-200`}>
                         <td className="py-3 px-4 font-bold text-zinc-800">{t.user?.name}</td>
                         <td className="py-3 px-4 text-zinc-550 font-semibold">{t.user?.department?.name || 'No Dept'}</td>
@@ -1331,30 +1792,65 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                           {new Date(t.updatedAt).toLocaleDateString()}
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              onClick={() => handleRestoreTask(t.id)}
-                              className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-1 rounded border border-zinc-200 font-bold"
-                            >
-                              Restore
-                            </button>
-                            <button
-                              onClick={() => handleDeleteTask(t.id)}
-                              className="text-xs bg-red-50 hover:bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-bold"
-                            >
-                              Delete
-                            </button>
-                          </div>
+                          {(user.role === 'SCHOOL_ADMIN' || user.role === 'PRINCIPAL') ? (
+                            <div className="flex justify-end gap-1">
+                              <button
+                                onClick={() => handleRestoreTask(t.id)}
+                                className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-1 rounded border border-zinc-200 font-bold"
+                              >
+                                Restore
+                              </button>
+                              <button
+                                onClick={() => handleDeleteTask(t.id)}
+                                className="text-xs bg-red-50 hover:bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-bold"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
+                              Completed / Archived
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              </div>
-            )}
-            </div>
+                    </table>
+                  </div>
+                )}
+                </div>
+              );
+            })()}
           </div>
         </div>
+      )}
+
+      {/* Alerts / Inbox Modal */}
+      {activeModal === 'notifications' && (
+        <SuperAlertModal 
+          tasks={tasks}
+          user={user}
+          onClose={() => setActiveModal(null)}
+          onAcceptTask={handleAcceptTaskAdmin}
+          onRejectTask={handleRejectTaskAdmin}
+          onCancelTask={handleCancelAdminNominatedTask}
+          onForceTask={handleForceTaskDirect}
+          onAcceptDelete={(taskId, isDeletion) => isDeletion ? handleApproveDeletion(taskId) : handleApproveUpdate(taskId)}
+          onRejectDelete={(taskId, reason) => handleRejectDeletion(taskId, reason)}
+          onTaskClick={(task) => {
+            setActiveModal(null);
+            if (task.userId === user.id) {
+              handleOpenReview(task);
+            } else {
+              handleOpenReview(task);
+            }
+          }}
+          onRefresh={fetchTasks}
+          refreshDashboard={refreshDashboard}
+          notifications={notifications}
+          onDeleteNotification={onDeleteNotification}
+        />
       )}
 
       {/* Nominate / Assign task modal */}
@@ -1383,19 +1879,15 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Assign User</label>
-                  <select
-                    value={taskAssigneeId}
-                    onChange={(e) => setTaskAssigneeId(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none focus:bg-white"
-                    required
-                  >
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>
-                        {u.name} (Role: {u.role} • Dept: {u.department?.name || 'No Dept'})
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                    Assign User(s) / Staff (Type letter to filter, Select One or Multiple)
+                  </label>
+                  <AssigneeCombobox
+                    users={users}
+                    selectedUserIds={taskAssigneeIds}
+                    onChange={setTaskAssigneeIds}
+                    placeholder="Type name, letter, department, or role to filter assignees..."
+                  />
                 </div>
 
                 <div>
@@ -1438,13 +1930,28 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
 
                   <div>
                     <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
-                    <input
-                      type="date"
-                      value={taskTargetDate}
-                      onChange={(e) => setTaskTargetDate(e.target.value)}
+                    <select
+                      value={taskNominationPeriod}
+                      onChange={(e) => setTaskNominationPeriod(e.target.value)}
                       className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
-                    />
+                    >
+                      <option value="weekly">This Week</option>
+                      <option value="monthly">This Month</option>
+                      <option value="yearly">This Year</option>
+                      <option value="custom">Specific Target Date</option>
+                    </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Or Choose Specific Target Date</label>
+                  <input
+                    type="date"
+                    value={taskTargetDate}
+                    onChange={(e) => setTaskTargetDate(e.target.value)}
+                    disabled={taskNominationPeriod !== 'custom'}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none disabled:opacity-50"
+                  />
                 </div>
               </div>
 
@@ -1476,106 +1983,207 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       {/* Edit User Modal Overlay */}
       {editingUser && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-zinc-900 mb-2">Edit Account privileges</h3>
-            <p className="text-zinc-500 text-xs mb-4">Editing account: <span className="font-bold">@{editingUser.username}</span></p>
-
-            {editUserError && (
-              <div className="bg-red-50 border border-red-200 p-2 rounded text-red-800 font-bold text-xs mb-2">
-                {editUserError}
-              </div>
-            )}
-
-            <form onSubmit={handleEditUserSubmit} className="space-y-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden animate-scaleIn text-zinc-900" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Display Name</label>
-                <input
-                  type="text"
-                  value={editUserName}
-                  onChange={(e) => setEditUserName(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                  required
-                />
+                <h3 className="text-lg font-bold text-zinc-900">Edit Account Privileges</h3>
+                <p className="text-zinc-500 text-xs mt-0.5">Editing account: <span className="font-bold text-zinc-800">@{editingUser.username}</span></p>
               </div>
+              <button 
+                onClick={() => setEditingUser(null)}
+                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+            </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Username</label>
-                <input
-                  type="text"
-                  value={editUserUsername}
-                  onChange={(e) => setEditUserUsername(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                  required
-                />
-              </div>
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              {editUserError && (
+                <div className="bg-red-50 border border-red-200 p-3 rounded-xl text-red-800 font-bold text-xs mb-4">
+                  {editUserError}
+                </div>
+              )}
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Password (Leave blank to keep current)</label>
-                <input
-                  type="password"
-                  value={editUserPassword}
-                  onChange={(e) => setEditUserPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Position</label>
-                <input
-                  type="text"
-                  value={editUserPosition}
-                  onChange={(e) => setEditUserPosition(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+              <form onSubmit={handleEditUserSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Role</label>
-                  <select
-                    value={editUserRole}
-                    onChange={(e) => setEditUserRole(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                  >
-                    {availableRoles.map(r => (
-                      <option key={r.value} value={r.value}>{r.label}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Display Name</label>
+                  <input
+                    type="text"
+                    value={editUserName}
+                    onChange={(e) => setEditUserName(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none focus:bg-white"
+                    required
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Department</label>
-                  <select
-                    value={editUserDeptId}
-                    onChange={(e) => setEditUserDeptId(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none"
-                  >
-                    <option value="">No Department</option>
-                    {departments.map(d => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Username</label>
+                  <input
+                    type="text"
+                    value={editUserUsername}
+                    onChange={(e) => setEditUserUsername(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none focus:bg-white"
+                    required
+                  />
                 </div>
-              </div>
 
-              <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4">
-                <button
-                  type="button"
-                  onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }}
-                  className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={editUserSubmitting}
-                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-5 text-xs font-bold shadow disabled:opacity-50"
-                >
-                  {editUserSubmitting ? 'Saving...' : 'Save User'}
-                </button>
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Password (Leave blank to keep current)</label>
+                  <input
+                    type="password"
+                    value={editUserPassword}
+                    onChange={(e) => setEditUserPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none focus:bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Position</label>
+                  <input
+                    type="text"
+                    value={editUserPosition}
+                    onChange={(e) => setEditUserPosition(e.target.value)}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:outline-none focus:bg-white"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Role</label>
+                    <select
+                      value={editUserRole}
+                      onChange={(e) => {
+                        const selectedRole = e.target.value;
+                        setEditUserRole(selectedRole);
+                        if (selectedRole === 'PRINCIPAL') {
+                          setEditUserDeptId('');
+                        } else {
+                          const filtered = departments.filter(d => {
+                            if (selectedRole === 'STAFF') return d.name === 'Admin';
+                            return d.name !== 'Admin';
+                          });
+                          if (filtered.length > 0) {
+                            setEditUserDeptId(filtered[0].id.toString());
+                          }
+                        }
+                      }}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs font-bold text-zinc-700 focus:outline-none focus:bg-white"
+                    >
+                      {availableRoles.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">Department</label>
+                    {editUserRole === 'PRINCIPAL' ? (
+                      <select
+                        disabled
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-100 py-2 px-3 text-xs font-bold text-zinc-400 cursor-not-allowed select-none"
+                      >
+                        <option value="">N/A (All Academic Programs)</option>
+                      </select>
+                    ) : (
+                      <select
+                        value={editUserDeptId}
+                        onChange={(e) => setEditUserDeptId(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs font-bold text-zinc-700 focus:outline-none focus:bg-white"
+                      >
+                        <option value="">No Department</option>
+                        {departments.filter(d => {
+                          if (editUserRole === 'STAFF') {
+                            return d.name === 'Admin';
+                          } else {
+                            return d.name !== 'Admin';
+                          }
+                        }).map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUser(null)}
+                    className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold border border-zinc-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={editUserSubmitting}
+                    className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-5 text-xs font-bold shadow disabled:opacity-50 transition"
+                  >
+                    {editUserSubmitting ? 'Saving...' : 'Save User'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Department Personnel Inspection Modal Overlay */}
+      {selectedDeptMembers && (
+        <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setSelectedDeptMembers(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-scaleIn text-zinc-900" style={{maxHeight:'85vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
+              <div>
+                <h3 className="text-lg font-bold flex items-center gap-2 text-zinc-900">
+                  <Users className="h-5 w-5 text-blue-600" />
+                  {selectedDeptMembers.dept.name} — Department Personnel
+                </h3>
+                <p className="text-xs text-zinc-500 font-semibold mt-0.5">
+                  Total of {selectedDeptMembers.members.length} assigned member(s)
+                </p>
               </div>
-            </form>
+              <button 
+                onClick={() => setSelectedDeptMembers(null)}
+                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              {selectedDeptMembers.members.length === 0 ? (
+                <div className="text-center py-12 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl font-semibold text-xs">
+                  No personnel currently assigned to this department.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
+                      <tr>
+                        <th className="py-2.5 px-4">Name / Username</th>
+                        <th className="py-2.5 px-4">Role</th>
+                        <th className="py-2.5 px-4">Position</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200">
+                      {selectedDeptMembers.members.map((m, idx) => (
+                        <tr key={m.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-50'} hover:bg-zinc-100 transition`}>
+                          <td className="py-2.5 px-4">
+                            <span className="font-bold text-zinc-800 block">{m.name}</span>
+                            <span className="text-[10px] text-zinc-400">@{m.username}</span>
+                          </td>
+                          <td className="py-2.5 px-4 font-bold text-purple-700">
+                            {m.role}
+                          </td>
+                          <td className="py-2.5 px-4 text-zinc-600 font-semibold">
+                            {m.position || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1583,97 +2191,347 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
       {/* Review Task Modal Overlay */}
       {reviewingTask && (
         <div className="fixed inset-0 z-[400] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setReviewingTask(null); }}>
-          <div className="w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl animate-scaleIn text-zinc-900">
-            <h3 className="text-lg font-bold mb-2 text-zinc-900">Review Deliverable</h3>
-            <p className="text-zinc-500 text-xs mb-4">
-              Owner: <span className="font-bold text-zinc-800">{reviewingTask.user?.name}</span> • Description: <span className="italic">{reviewingTask.taskDescription}</span>
-            </p>
-
-            <form onSubmit={handleUpdateTaskReview} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Action Status</label>
-                <select
-                  value={reviewStatus}
-                  onChange={(e) => setReviewStatus(e.target.value)}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
-                >
-                  <option value="Ongoing">Ongoing</option>
-                  <option value="Completed">Completed (Approve & Archive)</option>
-                  <option value="Delayed">Delayed / Overdue</option>
-                  <option value="Not Started">Not Started</option>
-                  <option value="Awaiting Approval">Awaiting Approval</option>
-                </select>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider mb-2">
-                  <span className="text-zinc-500">Supervised Progress</span>
-                  <span className="text-blue-600 text-sm">{reviewProgress}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={reviewProgress}
-                  onChange={(e) => setReviewProgress(parseInt(e.target.value, 10))}
-                  style={{ background: `linear-gradient(to right, #22c55e 0%, #22c55e ${reviewProgress}%, #e4e4e7 ${reviewProgress}%, #e4e4e7 100%)` }} className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600 bg-zinc-200"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Remarks</label>
-                <input
-                  type="text"
-                  value={reviewRemarks}
-                  onChange={(e) => setReviewRemarks(e.target.value)}
-                  placeholder="Remarks..."
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-between border-t border-zinc-100 pt-4">
-                <button
-                  type="button"
-                  onClick={() => handleDeleteTask(reviewingTask.id)}
-                  className="rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 py-2 px-4 text-xs font-bold"
-                >
-                  Delete Task
-                </button>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => { if (e.target === e.currentTarget) setReviewingTask(null); }}
-                    className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={reviewUpdating}
-                    className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-5 text-xs font-bold shadow disabled:opacity-50"
-                  >
-                    {reviewUpdating ? 'Saving...' : 'Save Changes'}
-                  </button>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col overflow-hidden text-zinc-900 animate-scaleIn" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-blue-50 rounded-lg"><Eye className="h-5 w-5 text-blue-600" /></div>
+                <div>
+                  <h3 className="text-base font-black text-zinc-900 font-sans">Review Deliverable</h3>
+                  <p className="text-[11px] text-zinc-400 font-semibold font-sans">Owner: <strong className="text-zinc-700">{reviewingTask.user?.name}</strong> — {reviewingTask.taskDescription?.substring(0,60)}</p>
                 </div>
               </div>
-            </form>
+              <button onClick={() => setReviewingTask(null)} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Close</button>
+            </div>
+            
+            <div className="flex-1 min-h-0 overflow-y-auto p-6 font-sans">
+              {reviewingTask.status === 'Awaiting Approval' ? (
+                /* === AWAITING APPROVAL PANEL === */
+                <div className="space-y-5">
+                  <div className="rounded-xl border-2 border-amber-350 bg-amber-50 p-4 flex items-start gap-3">
+                    <div className="text-2xl mt-0.5">⏳</div>
+                    <div>
+                      <p className="text-sm font-black text-amber-800">Progress Update Requested</p>
+                      <p className="text-xs text-amber-700 mt-0.5">
+                        <strong>{reviewingTask.user?.name}</strong> submitted a progress update request.
+                        Current recorded progress: <strong>{reviewingTask.progress}%</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Progress View */}
+                  <div>
+                    <div className="flex justify-between text-xs font-bold uppercase tracking-wider mb-2">
+                      <span className="text-zinc-500">Submitted Progress</span>
+                      <span className="text-amber-600 text-sm font-black">{reviewingTask.progress}%</span>
+                    </div>
+                    <div className="w-full h-3 rounded-full bg-zinc-100 overflow-hidden">
+                      <div className="h-3 rounded-full bg-amber-400 transition-all" style={{ width: `${reviewingTask.progress}%` }} />
+                    </div>
+                  </div>
+
+                  {/* Remarks timeline */}
+                  <div className="space-y-2">
+                    {reviewingTask.remarks && (
+                      <div className="bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                        {renderRemarksLog(reviewingTask.remarks)}
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs font-bold text-red-600 uppercase tracking-wider mb-1.5">Rejection Reason <span className="text-red-500">* Required to Reject</span></label>
+                      <textarea
+                        rows={2}
+                        value={reviewRemarks}
+                        onChange={(e) => setReviewRemarks(e.target.value)}
+                        placeholder="Required: State clearly why this update is being rejected..."
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none resize-none font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 border-t border-zinc-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!reviewRemarks.trim()) {
+                          triggerAlert('Remarks Required', 'Please provide a reason to reject this progress update.');
+                          return;
+                        }
+                        await handleRejectTaskAdmin(reviewingTask.id, reviewRemarks);
+                        setReviewingTask(null);
+                        setReviewRemarks('');
+                      }}
+                      className="flex-1 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 py-3 text-xs font-black transition"
+                    >
+                      ✕ Reject Update
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleApproveUpdate(reviewingTask.id);
+                        setReviewingTask(null);
+                      }}
+                      className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white py-3 text-xs font-black shadow-lg transition"
+                    >
+                      ✓ Approve{reviewingTask.progress === 100 ? ' & Complete' : ' Update'}
+                    </button>
+                  </div>
+                </div>
+              ) : reviewingTask.status === 'Awaiting Deletion' ? (
+                /* === AWAITING DELETION PANEL === */
+                <div className="space-y-5">
+                  <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-4 flex items-start gap-3">
+                    <div className="text-2xl mt-0.5">🗑️</div>
+                    <div>
+                      <p className="text-sm font-black text-orange-850">Deletion Request Pending</p>
+                      <p className="text-xs text-orange-750 mt-0.5">
+                        <strong>{reviewingTask.user?.name}</strong> has requested to delete this task.
+                        You can approve the deletion to permanently remove this deliverable, or reject it to return it to Ongoing.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Remarks timeline */}
+                  <div className="space-y-2">
+                    {reviewingTask.remarks && (
+                      <div className="bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                        {renderRemarksLog(reviewingTask.remarks)}
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs font-bold text-red-600 uppercase tracking-wider mb-1.5">Rejection Reason <span className="text-red-500">* Required to Reject</span></label>
+                      <textarea
+                        rows={2}
+                        value={reviewRemarks}
+                        onChange={(e) => setReviewRemarks(e.target.value)}
+                        placeholder="Required: State clearly why this deletion is being rejected..."
+                        className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none resize-none font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 border-t border-zinc-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!reviewRemarks.trim()) {
+                          triggerAlert('Remarks Required', 'Please provide a reason to reject this deletion request.');
+                          return;
+                        }
+                        await handleRejectDeletion(reviewingTask.id, reviewRemarks);
+                      }}
+                      className="flex-1 rounded-xl bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 py-3 text-xs font-black transition"
+                    >
+                      ✕ Reject Deletion
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        await handleApproveDeletion(reviewingTask.id);
+                        setReviewingTask(null);
+                      }}
+                      className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white py-3 text-xs font-black shadow-lg transition"
+                    >
+                      🗑️ Approve Deletion
+                    </button>
+                  </div>
+                </div>
+              ) : Number(reviewingTask.userId) === Number(user.id || user.userId) ? (
+                /* === TASK OWNER INTERACTIVE FORM === */
+                <form onSubmit={handleUpdateTaskReview} className="space-y-4 font-sans text-zinc-900">
+                  <div>
+                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-wider mb-2">
+                      <span className="text-zinc-500">Progress</span>
+                      <span className="text-blue-600 text-sm font-black">{reviewProgress}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={reviewProgress}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10);
+                        setReviewProgress(val);
+                        if (val === 100) setReviewStatus('Completed');
+                        else if (val < 100 && reviewStatus === 'Completed') setReviewStatus('Ongoing');
+                      }}
+                      style={{ background: `linear-gradient(to right, #22c55e 0%, #22c55e ${reviewProgress}%, #e4e4e7 ${reviewProgress}%, #e4e4e7 100%)` }}
+                      className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600 bg-zinc-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Action Status</label>
+                    <select
+                      value={reviewStatus}
+                      onChange={(e) => setReviewStatus(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none font-bold"
+                    >
+                      <option value="Ongoing">Ongoing</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Delayed">Delayed / Overdue</option>
+                      <option value="Not Started">Not Started</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Evidence Link / Reference URL</label>
+                    <input
+                      type="url"
+                      value={reviewEvidenceLink}
+                      onChange={(e) => setReviewEvidenceLink(e.target.value)}
+                      placeholder="https://drive.google.com/..."
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none font-medium"
+                    />
+                  </div>
+
+                  {reviewingTask.remarks && (
+                    <div className="bg-zinc-50 border border-zinc-200 rounded-lg px-3 py-2">
+                      {renderRemarksLog(reviewingTask.remarks)}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Add Progress Note / Remarks</label>
+                    <input
+                      type="text"
+                      value={reviewRemarks}
+                      onChange={(e) => setReviewRemarks(e.target.value)}
+                      placeholder="e.g. Updated progress to 50%."
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
+                    />
+                  </div>
+
+                  <div className="flex gap-3 border-t border-zinc-100 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        triggerConfirm('Delete Task', 'Are you sure you want to permanently delete this task deliverable?', async () => {
+                          await deleteAdminAction(reviewingTask.id);
+                          setReviewingTask(null);
+                        });
+                      }}
+                      className="flex-1 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 py-3 text-xs font-black transition"
+                    >
+                      Delete Task
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={reviewUpdating}
+                      className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white py-3 text-xs font-black shadow-lg disabled:opacity-50 transition"
+                    >
+                      {reviewUpdating ? 'Saving...' : 'Update Task Progress'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* === READ-ONLY MONITORING VIEW === */
+                <div className="space-y-5 text-zinc-900">
+                  <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-zinc-200/55">
+                      <span className="text-zinc-500 font-bold uppercase tracking-wider text-[10px]">Category</span>
+                      <span className="text-xs font-bold text-zinc-800">{reviewingTask.category}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-2 border-b border-zinc-200/55">
+                      <span className="text-zinc-500 font-bold uppercase tracking-wider text-[10px]">Priority</span>
+                      <span className="text-xs font-bold text-zinc-800">{reviewingTask.priority}</span>
+                    </div>
+                    <div className="flex justify-between items-center pb-2 border-b border-zinc-200/55">
+                      <span className="text-zinc-500 font-bold uppercase tracking-wider text-[10px]">Due Date</span>
+                      <span className="text-xs font-bold text-zinc-800">
+                        {reviewingTask.targetDate ? new Date(reviewingTask.targetDate).toLocaleDateString('en-US', { dateStyle: 'medium' }) : 'No deadline'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pb-2 border-b border-zinc-200/55">
+                      <span className="text-zinc-500 font-bold uppercase tracking-wider text-[10px]">Current Status</span>
+                      <span className="rounded border px-2 py-0.5 text-xs font-bold bg-blue-50 text-blue-700 border-blue-200">
+                        {reviewingTask.status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-xs font-bold text-zinc-500 uppercase tracking-wider">
+                        <span>Task Progress</span>
+                        <span>{reviewingTask.progress}%</span>
+                      </div>
+                      <div className="w-full bg-zinc-200 h-2.5 rounded-full overflow-hidden">
+                        <div className="bg-green-600 h-full rounded-full transition-all duration-300" style={{ width: `${reviewingTask.progress}%` }}></div>
+                      </div>
+                    </div>
+
+                    {reviewingTask.remarks && (
+                      <div className="pt-2 border-t border-zinc-200">
+                        {renderRemarksLog(reviewingTask.remarks)}
+                      </div>
+                    )}
+
+                    {reviewingTask.evidenceLink && (
+                      <div className="pt-2 border-t border-zinc-200">
+                        <span className="text-zinc-500 font-bold uppercase tracking-wider text-[10px] block mb-1">Evidence Link</span>
+                        <a
+                          href={reviewingTask.evidenceLink.startsWith('http') ? reviewingTask.evidenceLink : `https://${reviewingTask.evidenceLink}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-blue-600 hover:underline font-bold"
+                        >
+                          {reviewingTask.evidenceLink}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between border-t border-zinc-100 pt-4">
+                    <div className="flex gap-2">
+                      {reviewingTask.status === 'Rejected' && Number(reviewingTask.nominatedById) === Number(user.id) && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReviewingTask(null);
+                              setForcingTaskId(reviewingTask.id);
+                            }}
+                            className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 text-xs font-bold transition shadow-sm"
+                          >
+                            Force Push
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleCancelAdminNominatedTask(reviewingTask.id)}
+                            className="rounded-lg bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 py-2 px-4 text-xs font-bold transition"
+                          >
+                            Cancel Nomination
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setReviewingTask(null)}
+                      className="rounded-lg bg-zinc-800 hover:bg-zinc-900 text-white py-2 px-6 font-bold text-xs shadow transition animate-none"
+                    >
+                      Close Viewer
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Gorgeous Custom Confirmation Dialog */}
       {confirmDialog && (
-        <div className="fixed inset-0 z-[450] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog(null); }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <div className="flex items-center gap-3 text-red-600 mb-3">
-              <ShieldAlert className="h-6 w-6" />
+              <ShieldAlert className="h-6 w-6 shrink-0" />
               <h4 className="font-black text-base uppercase tracking-wide">{confirmDialog.title}</h4>
             </div>
             <p className="text-xs text-zinc-600 font-bold mb-6 leading-relaxed">{confirmDialog.message}</p>
             <div className="flex justify-end gap-2">
               <button
-                onClick={(e) => { if (e.target === e.currentTarget) setConfirmDialog(null); }}
+                onClick={() => setConfirmDialog(null)}
                 className="px-4 py-2 bg-zinc-100 hover:bg-zinc-200 border border-zinc-250 text-zinc-700 font-bold rounded-lg text-xs transition"
               >
                 Cancel
@@ -1683,7 +2541,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
                   confirmDialog.onConfirm();
                   setConfirmDialog(null);
                 }}
-                className="px-4 py-2 bg-red-600 hover:bg-red-750 text-white font-bold rounded-lg text-xs transition shadow-md active:scale-95"
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg text-xs transition shadow-md active:scale-95"
               >
                 Confirm
               </button>
@@ -1692,7 +2550,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger }) {
         </div>
       )}
       {customDialog && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">{customDialog.title}</h4>
             <p className="text-xs text-zinc-500 font-medium mb-6 leading-relaxed">{customDialog.message}</p>

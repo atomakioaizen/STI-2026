@@ -89,11 +89,40 @@ export async function GET(request) {
       }
     }
 
-    // Get Completed tasks by FACULTY_STAFF only (these are the competitors)
+    // Get eligible users based on requester role
+    // PROGRAM_HEAD: only FACULTY_STAFF in their department
+    // PRINCIPAL: PROGRAM_HEAD and FACULTY_STAFF (excluding Admin department)
+    // SCHOOL_ADMIN: PROGRAM_HEAD, FACULTY_STAFF (academic faculty), and FACULTY_STAFF (Admin department)
+    
+    let roleFilter = {};
+    if (user.role === 'PROGRAM_HEAD') {
+      roleFilter = {
+        role: 'FACULTY_STAFF',
+        departmentId: user.departmentId
+      };
+    } else if (user.role === 'PRINCIPAL') {
+      roleFilter = {
+        OR: [
+          { role: 'PROGRAM_HEAD' },
+          { role: 'FACULTY_STAFF', department: { name: { not: 'Admin' } } }
+        ]
+      };
+    } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+      roleFilter = {
+        OR: [
+          { role: 'PROGRAM_HEAD' },
+          { role: 'FACULTY_STAFF' }
+        ]
+      };
+    } else {
+      // FACULTY_STAFF cannot view leaderboard
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const tasks = await prisma.task.findMany({
       where: {
         entryDate: { gte: startDate, lte: endDate },
-        user: { role: 'FACULTY_STAFF' }, // Only FACULTY_STAFF compete
+        user: roleFilter,
       },
       include: {
         user: {
@@ -161,29 +190,36 @@ export async function GET(request) {
       }
     }
 
-    // Sort all FACULTY_STAFF by score
+    // Sort all retrieved participants by score
     const allRanked = Object.values(scoreMap)
       .sort((a, b) => b.totalScore - a.totalScore)
       .map((entry, idx) => ({ ...entry, rank: idx + 1 }));
 
-    // Separate: Academic Faculty vs Admin Staff — each with their own internal rank
+    // Grouping into specific category arrays for views
+    const programHeads = allRanked
+      .filter((e) => e.user.role === 'PROGRAM_HEAD')
+      .map((entry, idx) => ({ ...entry, categoryRank: idx + 1 }));
+
     const academicFaculty = allRanked
-      .filter((e) => e.user.department?.name !== 'Admin')
+      .filter((e) => e.user.role === 'FACULTY_STAFF' && e.user.department?.name !== 'Admin')
       .map((entry, idx) => ({ ...entry, categoryRank: idx + 1 }));
 
     const adminStaff = allRanked
-      .filter((e) => e.user.department?.name === 'Admin')
+      .filter((e) => e.user.role === 'FACULTY_STAFF' && e.user.department?.name === 'Admin')
       .map((entry, idx) => ({ ...entry, categoryRank: idx + 1 }));
 
-    const facultyOfMonth = academicFaculty[0] || null;
-    const staffOfMonth   = adminStaff[0]       || null;
+    const programHeadOfPeriod = (programHeads[0] && programHeads[0].totalScore > 0) ? programHeads[0] : null;
+    const facultyOfPeriod     = (academicFaculty[0] && academicFaculty[0].totalScore > 0) ? academicFaculty[0] : null;
+    const staffOfPeriod       = (adminStaff[0] && adminStaff[0].totalScore > 0) ? adminStaff[0] : null;
 
     return NextResponse.json({
       success: true,
       month: selectedMonth,
+      userRole: user.role,
+      userDepartmentId: user.departmentId,
       rankings: allRanked,
-      categories: { academicFaculty, adminStaff },
-      awards: { facultyOfMonth, staffOfMonth },
+      categories: { programHeads, academicFaculty, adminStaff },
+      awards: { programHeadOfPeriod, facultyOfPeriod, staffOfPeriod },
       formula: {
         priorityPts: { High: 30, Medium: 20, Low: 10 },
         timeFactor: { on_time: 1.5, no_deadline: 1.2, delayed: 1.0 },

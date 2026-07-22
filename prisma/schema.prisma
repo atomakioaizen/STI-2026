@@ -23,32 +23,35 @@ model User {
   role         String        // "ADMIN", "PROGRAM_HEAD", "FACULTY_STAFF"
   departmentId Int?
   department   Department?   @relation(fields: [departmentId], references: [id])
-  tasks        Task[]
+  tasks        Task[]        @relation("TaskOwner")
+  nominatedTasks Task[]      @relation("TaskNominator")
   activityLogs ActivityLog[]
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 }
 
 model Task {
-  id              Int       @id @default(autoincrement())
-  entryDate       DateTime
-  targetDate      DateTime?
-  category        String
-  taskDescription String
-  priority        String    // "High", "Medium", "Low"
-  status          String    // "Not Started", "Ongoing", "Completed", "Delayed"
-  progress        Int       @default(0) // 0 to 100
-  remarks         String?
-  evidenceLink    String?
-  archived        Boolean   @default(false)
-  userId          Int
-  user            User      @relation(fields: [userId], references: [id])
-  nominatedById   Int?      // ID of the user who assigned/nominated the task
-  rejectionReason String?   // Reason provided by the assignee upon rejection
-  rejectionCount  Int       @default(0) // Count of rejection attempts for performance tracking
-  assignedNote    String?   // Note/explanation from the supervisor when pushing/forcing the task
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id               Int       @id @default(autoincrement())
+  entryDate        DateTime
+  targetDate       DateTime?
+  category         String
+  taskDescription  String
+  priority         String    // "High", "Medium", "Low"
+  status           String    // "Not Started", "Ongoing", "Completed", "Delayed"
+  progress         Int       @default(0) // 0 to 100
+  previousProgress Int?                  // snapshot of progress before approval request, restored on rejection
+  remarks          String?
+  evidenceLink     String?
+  archived         Boolean   @default(false)
+  userId           Int
+  user             User      @relation("TaskOwner", fields: [userId], references: [id])
+  nominatedById    Int?      // ID of the user who assigned/nominated the task
+  nominatedBy      User?     @relation("TaskNominator", fields: [nominatedById], references: [id])
+  rejectionReason  String?   // Reason provided by the assignee upon rejection
+  rejectionCount   Int       @default(0) // Count of rejection attempts for performance tracking
+  assignedNote     String?   // Note/explanation from the supervisor when pushing/forcing the task
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 model ActivityLog {

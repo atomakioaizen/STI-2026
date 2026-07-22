@@ -5,12 +5,18 @@
 
 require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
+const { PrismaPg } = require('@prisma/adapter-pg');
+const pg = require('pg');
 const bcrypt = require('bcryptjs');
 
-const prisma = new PrismaClient();
+const dbUrl = process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
+const pool = new pg.Pool({ connectionString: dbUrl });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('🗑  Wiping all existing data...');
+  await prisma.activityLog.deleteMany({});
   await prisma.task.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.department.deleteMany({});
@@ -189,7 +195,132 @@ async function main() {
     }
   });
 
-  console.log('🎉 Seed completed successfully! Database has been cleared and seeded with the real user accounts.');
+  console.log('── Generating ~200 Diverse Dummy Transactions across accounts and dates...');
+
+  const allUsers = await prisma.user.findMany();
+  const categories = [
+    'Curriculum & Instruction',
+    'Student Affairs',
+    'Research & Development',
+    'Administrative Reports',
+    'Events & Seminars',
+    'Facility & Maintenance',
+    'Community Extension'
+  ];
+  
+  const priorities = ['High', 'Medium', 'Low'];
+  const statuses = [
+    'Completed',
+    'Ongoing',
+    'Delayed',
+    'Awaiting Approval',
+    'Rejected',
+    'Pending Acceptance',
+    'Awaiting Deletion'
+  ];
+
+  const sampleDescriptions = [
+    'Submit Midterm Grading Sheets & Examination Transcripts',
+    'Prepare Accreditation Documents & Syllabi Updates',
+    'Conduct Faculty Peer Evaluation and Performance Review',
+    'Organize Departmental Orientation for incoming Enrollees',
+    'Consolidate Research Proposals and Ethical Clearance Form',
+    'Inventory Equipment and Computer Laboratory Asset Checking',
+    'Draft Quarterly Accomplishment Report for Administration',
+    'Submit Class Attendance Logs and Syllabus Checklist',
+    'Coordinate Campus Event Logistics & Security Details',
+    'Update Student Internship Guidelines & Partner MOUs',
+    'Review Learning Management System Module Uploads',
+    'Facilitate Community Extension Workshop & Outreach'
+  ];
+
+  const remarksOptions = [
+    'Completed ahead of time with zero issues.',
+    'Submitted initial draft, currently waiting for supervisor review.',
+    'Slight delay due to pending external documents.',
+    'Rejection: Incorrect file format uploaded. Please re-submit.',
+    'Nominated to assignee. Pending initial acceptance.',
+    'Requested for task deletion due to change of schedule.',
+    'Progressing smoothly at 75%. On track for target completion.'
+  ];
+
+  let taskCount = 0;
+  // Months: Feb 2026 to July 2026
+  const monthsList = [
+    { year: 2026, month: 1 }, // Feb
+    { year: 2026, month: 2 }, // Mar
+    { year: 2026, month: 3 }, // Apr
+    { year: 2026, month: 4 }, // May
+    { year: 2026, month: 5 }, // Jun
+    { year: 2026, month: 6 }  // Jul
+  ];
+
+  const supervisorUsers = allUsers.filter(u => u.role === 'SCHOOL_ADMIN' || u.role === 'PRINCIPAL' || u.role === 'PROGRAM_HEAD');
+
+  for (let i = 0; i < 200; i++) {
+    const userObj = allUsers[i % allUsers.length];
+    const monthObj = monthsList[i % monthsList.length];
+    const category = categories[i % categories.length];
+    const priority = priorities[i % priorities.length];
+    const status = statuses[i % statuses.length];
+    const descBase = sampleDescriptions[i % sampleDescriptions.length];
+    const description = `${descBase} (Batch #${Math.floor(i / 10) + 1})`;
+
+    // Randomize entry day and target date
+    const day = (i % 25) + 1;
+    const entryDate = new Date(monthObj.year, monthObj.month, day, 9, 0, 0);
+    
+    // Target date: entryDate + 3 to 10 days
+    const targetDate = new Date(entryDate);
+    targetDate.setDate(entryDate.getDate() + ((i % 7) + 3));
+
+    const isNominated = (i % 3 === 0);
+    const nominator = isNominated ? supervisorUsers[i % supervisorUsers.length] : null;
+
+    let finalStatus = status;
+    let finalNominator = nominator;
+
+    // SCHOOL_ADMIN (Michael Kim Palay) has no supervisor above him!
+    // Therefore, any task owned by SCHOOL_ADMIN should never be in approval/acceptance/deletion request states.
+    if (userObj.role === 'SCHOOL_ADMIN') {
+      if (finalStatus === 'Awaiting Approval' || finalStatus === 'Pending Acceptance' || finalStatus === 'Awaiting Deletion') {
+        finalStatus = 'Ongoing';
+      }
+      finalNominator = null;
+    }
+
+    let progress = 0;
+    if (finalStatus === 'Completed') progress = 100;
+    else if (finalStatus === 'Ongoing' || finalStatus === 'Awaiting Approval') progress = Math.min(95, ((i % 8) + 1) * 10);
+    else if (finalStatus === 'Delayed') progress = Math.min(80, ((i % 5) + 1) * 10);
+
+    const isArchived = (finalStatus === 'Completed' && (i % 2 === 0));
+
+    await prisma.task.create({
+      data: {
+        entryDate,
+        targetDate,
+        category,
+        taskDescription: description,
+        priority,
+        status: finalStatus,
+        progress,
+        previousProgress: finalStatus === 'Awaiting Approval' ? progress - 20 : null,
+        remarks: remarksOptions[i % remarksOptions.length],
+        evidenceLink: finalStatus === 'Completed' || finalStatus === 'Awaiting Approval' ? 'https://drive.google.com/sample_proof_file' : null,
+        archived: isArchived,
+        userId: userObj.id,
+        nominatedById: finalNominator ? finalNominator.id : null,
+        rejectionReason: finalStatus === 'Rejected' ? 'Incomplete requirements submitted' : null,
+        rejectionCount: finalStatus === 'Rejected' ? 1 : 0,
+        assignedNote: isNominated && finalNominator ? 'Pushed from department priority list' : null
+      }
+    });
+
+    taskCount++;
+  }
+
+  console.log(`🎉 Seed completed successfully! Database cleared and populated with 200 comprehensive dummy tasks for testing.`);
 }
 
 main()

@@ -14,19 +14,31 @@ export async function GET(request) {
 
     const where = {};
 
-    // Program heads can only view faculty in their own department
+    // Role-based visibility for Assignee lists & user management
     if (user.role === 'PROGRAM_HEAD') {
-      where.departmentId = user.departmentId;
-      where.role = 'FACULTY_STAFF';
+      where.OR = [
+        { departmentId: user.departmentId, role: 'FACULTY_STAFF' },
+        { id: user.userId }
+      ];
     } else if (user.role === 'PRINCIPAL') {
-      // Principal sees everyone EXCEPT Admin department (Staff)
-      where.department = {
-        name: { not: 'Admin' }
-      };
+      // Principal sees herself (for self-nomination) + all academic personnel, but CANNOT view or assign to School Admin or Admin department
+      where.OR = [
+        { id: user.userId },
+        {
+          role: { notIn: ['SCHOOL_ADMIN', 'ADMIN'] },
+          department: { name: { not: 'Admin' } }
+        }
+      ];
       if (departmentId && departmentId !== 'All') {
-        where.departmentId = parseInt(departmentId, 10);
+        const parsedDeptId = parseInt(departmentId, 10);
+        where.AND = [
+          { OR: where.OR },
+          { departmentId: parsedDeptId }
+        ];
+        delete where.OR;
       }
     } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+      // School Administrator has top authority across all accounts (himself, Principal, Program Heads, Faculty Staff)
       if (departmentId && departmentId !== 'All') {
         where.departmentId = parseInt(departmentId, 10);
       }
@@ -74,7 +86,7 @@ export async function POST(request) {
 
     const { name, username, password, position, role, departmentId } = await request.json();
 
-    if (!name || !username || !password || !role || !departmentId) {
+    if (!name || !username || !password || !role || (role !== 'PRINCIPAL' && !departmentId)) {
       return NextResponse.json(
         { error: 'Name, username, password, role, and department are required' },
         { status: 400 }
@@ -85,6 +97,8 @@ export async function POST(request) {
       'SCHOOL_ADMIN': 4,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
+      'FACULTY': 1,
+      'STAFF': 1,
       'FACULTY_STAFF': 1
     };
 
@@ -113,7 +127,7 @@ export async function POST(request) {
       );
     }
 
-    const targetDeptId = parseInt(departmentId, 10);
+    const targetDeptId = departmentId ? parseInt(departmentId, 10) : null;
     const hashedPassword = await hashPassword(password);
 
     // Auto-assign Program Head rule on creation:

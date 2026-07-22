@@ -4,13 +4,14 @@ import { useState, useEffect } from 'react';
 import { 
   CheckCircle2, Clock, AlertTriangle, TrendingUp, 
   PlusCircle, Calendar, List, Search, Plus, 
-  Trash2, ExternalLink, RefreshCw, Archive, Bell, FileSpreadsheet
+  Trash2, ExternalLink, RefreshCw, Archive, Bell, FileSpreadsheet, Inbox
 } from 'lucide-react';
 import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
 import { exportTasksToExcel } from '@/lib/reports';
+import { getTaskActorInfo } from '@/lib/taskHelpers';
 
-export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
+export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notifications = [], onDeleteNotification, refreshDashboard }) {
   const [tasks, setTasks] = useState([]);
   const [archivedTasks, setArchivedTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +60,18 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
   const [editProgress, setEditProgress] = useState(0);
   const [editRemarks, setEditRemarks] = useState('');
   const [editEvidenceLink, setEditEvidenceLink] = useState('');
+  const [editStatus, setEditStatus] = useState('Ongoing');
   const [updating, setUpdating] = useState(false);
+
+  // Archive States
+  const [archiveSearch, setArchiveSearch] = useState('');
+  const [archiveMonthFilter, setArchiveMonthFilter] = useState('All');
+  const [archiveYearFilter, setArchiveYearFilter] = useState('All');
+  const [archiveCurrentPage, setArchiveCurrentPage] = useState(1);
+
+  // Inbox States
+  const [selectedInboxTaskId, setSelectedInboxTaskId] = useState(null);
+  const [inboxMessageText, setInboxMessageText] = useState('');
 
   useEffect(() => {
     fetchTasks();
@@ -79,6 +91,24 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
     }
   }, [taskTrigger]);
 
+  const handleSendInboxMessage = async (taskId) => {
+    if (!inboxMessageText.trim()) return;
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remarks: inboxMessageText.trim() })
+      });
+      if (res.ok) {
+        setInboxMessageText('');
+        fetchTasks();
+        fetchArchivedTasks();
+      }
+    } catch (err) {
+      console.error('Error sending message', err);
+    }
+  };
+
   async function fetchTasks() {
     setLoading(true);
     try {
@@ -92,6 +122,9 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks);
+        if (refreshDashboard) {
+          refreshDashboard();
+        }
       }
     } catch (err) {
       console.error('Error fetching tasks:', err);
@@ -212,9 +245,13 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
   };
 
   const handleOpenEdit = (task) => {
+    if (task.status === 'Rejected' || task.status === 'Pending Acceptance' || task.status === 'Awaiting Approval' || task.status === 'Awaiting Deletion' || task.status === 'Completed') {
+      return;
+    }
     setEditingTask(task);
     setEditProgress(task.progress);
-    setEditRemarks(task.remarks || '');
+    setEditStatus(task.status === 'Awaiting Approval' ? 'Completed' : task.status);
+    setEditRemarks('');
     setEditEvidenceLink(task.evidenceLink || '');
   };
 
@@ -233,6 +270,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           progress: editProgress,
+          status: editStatus,
           remarks: editRemarks.trim(),
           evidenceLink: editEvidenceLink.trim()
         })
@@ -256,7 +294,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'Not Started' })
+        body: JSON.stringify({ status: 'Ongoing' })
       });
       if (res.ok) {
         fetchTasks();
@@ -322,7 +360,47 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       }
     };
     
-    const handleAcceptTask = async (taskId) => {
+    const handleCancelTaskDirect = async (taskId) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Cancelled', 'Nomination cancelled and deleted.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAcceptDeleteDirect = async (taskId) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Deleted', 'Task has been deleted.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleRejectDeleteDirect = async (taskId, reason) => {
+    try {
+      const res = await fetch(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'Rejected', remarks: reason || 'Rejection of deletion request' })
+      });
+      if (res.ok) {
+        fetchTasks();
+        triggerAlert('Rejected', 'Deletion request rejected.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAcceptTask = async (taskId) => {
     triggerConfirm('Accept Task', 'Do you want to accept this nominated task and add it to your active list?', async () => {
       try {
         const res = await fetch(`/api/tasks/${taskId}`, {
@@ -420,6 +498,15 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
           onClose={() => setShowSuperAlert(false)} 
           onAcceptTask={handleAcceptTaskDirect}
           onRejectTask={handleRejectTaskDirect}
+          onCancelTask={handleCancelTaskDirect}
+          onRefresh={fetchTasks}
+          refreshDashboard={refreshDashboard}
+          notifications={notifications}
+          onDeleteNotification={onDeleteNotification}
+          onTaskClick={(task) => {
+            setShowSuperAlert(false);
+            handleOpenEdit(task);
+          }}
         />
       )}
 
@@ -441,72 +528,60 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       </div>
 
       {/* Dashboard Modular Navigation Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         
         {/* Card 1: Active Tasks */}
         <button
           onClick={() => setActiveModal('tasks')}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-blue-500 rounded-2xl p-6 text-left shadow-sm transition-all duration-300 group flex flex-col justify-between hover:shadow-md min-h-[200px]"
         >
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition">
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition duration-300">
               <List className="h-6 w-6 text-blue-600" />
             </div>
             {delayedTasks > 0 && (
-              <span className="bg-red-100 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-200">
+              <span className="bg-red-100 text-red-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200">
                 {delayedTasks} Delayed
               </span>
             )}
           </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-blue-600 transition">
-            My Active Tasks
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            {totalTasks} active tasks, {ongoingTasks} ongoing, {awaitingApprovalTasks} pending approval.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-600">
-            Open List →
-          </span>
-        </button>
-        {/* Card 2: Calendar */}
-        <button
-          onClick={() => document.getElementById('floating-calendar-trigger')?.click()}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
-        >
-          <div className="p-3 bg-yellow-50 rounded-xl group-hover:bg-yellow-100 transition inline-block">
-            <Calendar className="h-6 w-6 text-yellow-600" />
+          <div>
+            <h3 className="font-black text-lg text-zinc-900 group-hover:text-blue-600 transition duration-300 leading-tight">
+              My Active Tasks
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-2 leading-relaxed">
+              Manage your ongoing assignments, submit updates, and request completions.
+            </p>
           </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-yellow-600 transition">
-            Built-in Calendar
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            Check all deadlines scheduled on a monthly map. Don't miss dates!
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-yellow-600">
-            Open Interactive Calendar →
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 mt-2">
+            Open List →
           </span>
         </button>
 
         {/* Card 3: Notifications Alert Centre */}
         <button
           onClick={() => setActiveModal('notifications')}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-500 rounded-2xl p-6 text-left shadow-sm transition-all duration-300 group flex flex-col justify-between hover:shadow-md min-h-[200px]"
         >
-          <div className="flex justify-between items-start">
-            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition">
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition duration-300">
               <Bell className="h-6 w-6 text-red-600" />
             </div>
             {delayedTasks > 0 && (
-              <span className="h-3.5 w-3.5 rounded-full bg-red-600 animate-ping" />
+              <span className="bg-red-100 text-red-855 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
+                {delayedTasks} Warnings
+              </span>
             )}
           </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-red-600 transition">
-            Important Alerts
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            Check warnings, pending actions, and urgent task notices.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-red-600">
+          <div>
+            <h3 className="font-black text-lg text-zinc-900 group-hover:text-red-600 transition duration-300 leading-tight">
+              Important Alerts
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-2 leading-relaxed">
+              Check warnings, pending actions, and urgent task notices inside your portal.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 mt-2">
             Open Alerts →
           </span>
         </button>
@@ -514,18 +589,25 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
         {/* Card 4: Archive */}
         <button
           onClick={() => setActiveModal('archive')}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-purple-500 rounded-2xl p-6 text-left shadow-sm transition-all duration-300 group flex flex-col justify-between hover:shadow-md min-h-[200px]"
         >
-          <div className="p-3 bg-purple-50 rounded-xl group-hover:bg-purple-100 transition inline-block">
-            <Archive className="h-6 w-6 text-purple-600" />
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-purple-50 rounded-xl group-hover:bg-purple-100 transition duration-300">
+              <Archive className="h-6 w-6 text-purple-600" />
+            </div>
+            <span className="bg-purple-100 text-purple-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-purple-200">
+              {completedCount} Completed
+            </span>
           </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-purple-600 transition">
-            Completed Archive
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            {completedCount} archived tasks. Locked accomplishments.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
+          <div>
+            <h3 className="font-black text-lg text-zinc-900 group-hover:text-purple-600 transition duration-300 leading-tight">
+              Completed Archive
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-2 leading-relaxed">
+              View historical logs of your completed accomplishments and submissions.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-purple-600 mt-2">
             View Archive →
           </span>
         </button>
@@ -652,6 +734,19 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                 </button>
                 <button
                   onClick={() => {
+                    if (sortField === 'status') {
+                      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+                    } else {
+                      setSortField('status');
+                      setSortDirection('asc');
+                    }
+                  }}
+                  className={`px-2.5 py-1 rounded font-bold border transition ${sortField === 'status' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50'}`}
+                >
+                  📌 Status {sortField === 'status' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </button>
+                <button
+                  onClick={() => {
                     if (sortField === 'priority') {
                       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
                     } else {
@@ -689,7 +784,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-250">
-                      {[...tasks].sort((a, b) => {
+                      {[...tasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
                         let aVal = a[sortField];
                         let bVal = b[sortField];
                         if (sortField === 'targetDate' || sortField === 'entryDate') {
@@ -710,8 +805,15 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                       if (isCompleted) statusColor = 'text-green-800 bg-green-100 border-green-200';
                       if (isDelayed) statusColor = 'text-red-800 bg-red-100 border-red-200';
                       if (task.status === 'Not Started') statusColor = 'text-zinc-650 bg-zinc-100 border-zinc-200';
-                      if (task.status === 'Awaiting Approval') statusColor = 'text-purple-800 bg-purple-100 border-purple-200';
+                      if (task.status === 'Awaiting Approval') {
+                        if (task.progress === 0 && task.previousProgress === null) {
+                          statusColor = 'text-blue-800 bg-blue-100 border-blue-200';
+                        } else {
+                          statusColor = 'text-purple-800 bg-purple-100 border-purple-200';
+                        }
+                      }
                       if (task.status === 'Awaiting Deletion') statusColor = 'text-orange-800 bg-orange-100 border-orange-200';
+                      if (task.status === 'Rejected') statusColor = 'text-rose-800 bg-rose-100 border-rose-300';
 
                       let prioColor = 'text-zinc-700 bg-zinc-100';
                       if (task.priority === 'High') prioColor = 'text-red-700 bg-red-100';
@@ -720,19 +822,49 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                       return (
                         <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition group border-b border-zinc-200`}>
                           <td className="py-4 px-4 max-w-sm">
-                            <div>
-                              <span className="rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 uppercase">
-                                {task.category}
-                              </span>
-                              <h4 className="mt-1 text-sm font-bold text-zinc-900">
-                                {task.taskDescription}
-                              </h4>
-                              {task.remarks && (
-                                <p className="mt-1 text-xs text-zinc-500 italic">
-                                  Remarks: {task.remarks}
-                                </p>
-                              )}
-                            </div>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="rounded bg-blue-50 border border-blue-200/80 px-1.5 py-0.5 text-[9px] font-bold text-blue-700 uppercase tracking-wider">
+                                  {task.category}
+                                </span>
+                                <span className="text-xs font-bold text-zinc-950">
+                                  {task.taskDescription}
+                                </span>
+                              </div>
+                                {/* Actor Labels */}
+                                <div className="flex flex-wrap items-center gap-1 mt-1 text-[9px] leading-tight">
+                                  {task.nominatedBy?.name ? (
+                                    <span className="bg-blue-50/80 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                      👤 Nominated: {task.nominatedBy.name}
+                                    </span>
+                                  ) : (
+                                    <span className="bg-zinc-100 text-zinc-600 border border-zinc-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                      Self-Nominated
+                                    </span>
+                                  )}
+                                  {(() => {
+                                    const actorInfo = getTaskActorInfo(task);
+                                    return (
+                                      <>
+                                        {actorInfo.coAssignees && (
+                                          <span className="bg-indigo-50/80 text-indigo-700 border border-indigo-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
+                                            👥 Co-assigned: {actorInfo.coAssignees}
+                                          </span>
+                                        )}
+                                        {actorInfo.lastActionBy && (
+                                          <span className={`border px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5 ${
+                                            actorInfo.lastActionType === 'Approved' ? 'bg-emerald-50/80 text-emerald-700 border-emerald-200/60'
+                                            : actorInfo.lastActionType === 'Rejected' ? 'bg-red-50/80 text-red-700 border-red-200/60'
+                                            : 'bg-purple-50/80 text-purple-700 border-purple-200/60'
+                                          }`}>
+                                            {actorInfo.lastActionType}: {actorInfo.lastActionBy}
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
                           </td>
                           <td className="py-4 px-4 text-zinc-500 font-semibold">
                             {new Date(task.entryDate).toLocaleDateString()}
@@ -749,7 +881,9 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                             <div className="flex flex-col gap-1 w-24">
                               <div className="flex justify-between items-center font-bold">
                                 <span className={`rounded border px-1.5 py-0.2 text-[9px] ${statusColor}`}>
-                                  {task.status}
+                                  {task.status === 'Awaiting Approval' ? (
+                                    task.progress === 0 && task.previousProgress === null ? 'Awaiting Nomination Approval' : 'Awaiting Progress Approval'
+                                  ) : task.status}
                                 </span>
                                 <span className="text-zinc-500">{task.progress}%</span>
                               </div>
@@ -779,35 +913,41 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                             )}
                           </td>
                           <td className="py-4 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-1.5">
                               {(() => {
-                                const isLocked = isCompleted || task.status === 'Awaiting Approval' || task.status === 'Awaiting Deletion';
-                                if (isLocked) {
-                                  return (
-                                    <span className="text-[10px] text-zinc-400 font-bold border border-zinc-200 rounded px-1.5 py-0.5">
-                                      Locked
-                                    </span>
-                                  );
-                                }
+                                const isWaiting = task.status === 'Awaiting Approval' || task.status === 'Awaiting Deletion';
+                                const isRejected = task.status === 'Rejected';
+                                const isPending = task.status === 'Pending Acceptance';
+                                const isDisabled = isCompleted || isWaiting || isRejected || isPending;
+
+                                const buttonTitle = isWaiting ? 'Pending approval' :
+                                  isCompleted ? 'Completed' :
+                                  isRejected ? 'Task Rejected - Awaiting Supervisor action' :
+                                  isPending ? 'Pending Acceptance - Respond via Alert/Inbox' :
+                                  'Update Task';
                                 return (
                                   <>
                                     <button
+                                      disabled={isDisabled}
                                       onClick={() => handleOpenEdit(task)}
-                                      className="p-1 px-2 border border-zinc-200 bg-white hover:bg-zinc-50 rounded text-zinc-700 font-bold"
+                                      className={`text-xs border px-2 py-1 rounded font-bold transition-all ${
+                                        isDisabled
+                                          ? 'bg-zinc-100 border-zinc-250 text-zinc-400 cursor-not-allowed opacity-60'
+                                          : 'bg-white border-zinc-200 hover:bg-zinc-50 text-zinc-700 active:scale-95'
+                                      }`}
+                                      title={buttonTitle}
                                     >
-                                      Update
+                                      Edit
                                     </button>
                                     <button
-                                      onClick={() => handleQuickComplete(task.id)}
-                                      className="p-1 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded"
-                                      title="Complete"
-                                    >
-                                      <CheckCircle2 className="h-3.5 w-3.5" />
-                                    </button>
-                                    <button
+                                      disabled={isDisabled}
                                       onClick={() => handleRequestDeletion(task.id)}
-                                      className="p-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded"
-                                      title="Delete"
+                                      className={`p-1 border rounded transition-all ${
+                                        isDisabled
+                                          ? 'bg-zinc-100 border-zinc-250 text-zinc-400 cursor-not-allowed opacity-60'
+                                          : 'bg-red-50 hover:bg-red-100 text-red-700 border-red-200 active:scale-95'
+                                      }`}
+                                      title={buttonTitle}
                                     >
                                       <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -828,154 +968,227 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       </div>
       )}
 
-
-      {/* Alerts Modal */}
+      {/* Alerts / Inbox Modal */}
       {activeModal === 'notifications' && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold flex items-center gap-2 justify-center text-red-600 mb-2">
-              <Bell className="h-6 w-6" />
-              Urgent Notifications Center
-            </h3>
-            <p className="text-xs text-zinc-500 font-semibold mb-6">
-              Review task warnings and nearing deadlines. Keep details complete!
-            </p>
-            <div className="text-left space-y-3 max-h-[60vh] overflow-y-auto mb-6">
-              {tasks.filter(t => t.status === 'Delayed').map(t => (
-                <div key={t.id} className="p-3 bg-red-50 border border-red-200 rounded-xl flex gap-3 items-start">
-                  <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-red-800 uppercase tracking-wide">Delayed Task Alert</h4>
-                    <p className="text-xs text-zinc-700 font-medium mt-0.5">{t.taskDescription}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold mt-1">Due: {t.targetDate ? new Date(t.targetDate).toLocaleDateString() : 'N/A'}</p>
-                  </div>
-                </div>
-              ))}
-              {tasks.filter(t => t.status === 'Awaiting Approval').map(t => (
-                <div key={t.id} className="p-3 bg-purple-50 border border-purple-200 rounded-xl flex gap-3 items-start">
-                  <Clock className="h-5 w-5 text-purple-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-purple-800 uppercase tracking-wide">Awaiting Review</h4>
-                    <p className="text-xs text-zinc-700 font-medium mt-0.5">{t.taskDescription}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold mt-1">Status: Pending Program Head's signature.</p>
-                  </div>
-                </div>
-              ))}
-              {tasks.filter(t => t.status === 'Ongoing' && !t.targetDate).map(t => (
-                <div key={t.id} className="p-3 bg-zinc-50 border border-zinc-200 rounded-xl flex gap-3 items-start">
-                  <Clock className="h-5 w-5 text-zinc-600 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-extrabold text-xs text-zinc-800 uppercase tracking-wide">Missing Deadline</h4>
-                    <p className="text-xs text-zinc-700 font-medium mt-0.5">{t.taskDescription}</p>
-                    <p className="text-[10px] text-zinc-500 font-bold mt-1">Missing deadline! Add target date via update modal.</p>
-                  </div>
-                </div>
-              ))}
-              {tasks.filter(t => t.status === 'Ongoing' && t.targetDate).length === 0 && tasks.filter(t => t.status === 'Delayed').length === 0 && (
-                <p className="text-center text-xs text-zinc-400 font-semibold py-8">
-                  No critical alerts right now. Keep up the good work!
-                </p>
-              )}
-            </div>
-            <button
-              onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
-              className="w-full bg-zinc-100 hover:bg-zinc-200 text-zinc-800 font-bold py-3.5 px-6 rounded-xl border border-zinc-200 text-sm tracking-wider uppercase transition"
-            >
-              Close Alerts
-            </button>
-          </div>
-        </div>
+        <SuperAlertModal 
+          tasks={tasks}
+          user={user}
+          onClose={() => setActiveModal(null)}
+          onAcceptTask={handleAcceptTaskDirect}
+          onRejectTask={handleRejectTaskDirect}
+          onCancelTask={handleCancelTaskDirect}
+          onAcceptDelete={(taskId, isDeletion) => handleAcceptDeleteDirect(taskId)}
+          onRejectDelete={(taskId, reason) => handleRejectDeleteDirect(taskId, reason)}
+          onTaskClick={(task) => {
+            setActiveModal(null);
+            if (task.userId === user.id) {
+              handleOpenEdit(task);
+            }
+          }}
+          onRefresh={fetchTasks}
+          refreshDashboard={refreshDashboard}
+          notifications={notifications}
+          onDeleteNotification={onDeleteNotification}
+        />
       )}
 
       {/* Completed Archive Modal */}
-      {activeModal === 'archive' && (
-        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
-            <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
-              <div>
-                <h3 className="text-xl font-bold flex items-center gap-2 text-purple-750">
-                  <Archive className="h-6 w-6" />
-                  Task Archive & Completed Activities
-                </h3>
-                <p className="text-xs text-zinc-500 font-semibold mt-1">
-                  Manual opening to view completed entries. Kept out of clutter automatically.
-                </p>
+      {activeModal === 'archive' && (() => {
+        // Filter archive tasks
+        const filteredArchive = archivedTasks.filter(t => {
+          if (archiveSearch.trim() !== '') {
+            const query = archiveSearch.toLowerCase();
+            const desc = t.taskDescription?.toLowerCase() || '';
+            const cat = t.category?.toLowerCase() || '';
+            if (!desc.includes(query) && !cat.includes(query)) return false;
+          }
+          if (archiveMonthFilter !== 'All') {
+            const month = new Date(t.updatedAt).getMonth();
+            if (month !== parseInt(archiveMonthFilter, 10)) return false;
+          }
+          if (archiveYearFilter !== 'All') {
+            const year = new Date(t.updatedAt).getFullYear();
+            if (year !== parseInt(archiveYearFilter, 10)) return false;
+          }
+          return true;
+        });
+
+        // Pagination
+        const itemsPerPage = 10;
+        const totalPages = Math.ceil(filteredArchive.length / itemsPerPage);
+        const currentPageSafe = Math.min(archiveCurrentPage, totalPages || 1);
+        const startIndex = (currentPageSafe - 1) * itemsPerPage;
+        const paginatedArchive = filteredArchive.slice(startIndex, startIndex + itemsPerPage);
+
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        // Get unique years
+        const uniqueYears = Array.from(new Set(archivedTasks.map(t => new Date(t.updatedAt).getFullYear()))).sort((a,b)=>b-a);
+
+        return (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden animate-scaleIn text-zinc-900" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between items-center border-b border-zinc-100 px-6 py-4 flex-shrink-0">
+                <div>
+                  <h3 className="text-xl font-bold flex items-center gap-2 text-purple-800">
+                    <Archive className="h-6 w-6" />
+                    Task Archive & Completed Activities
+                  </h3>
+                  <p className="text-xs text-zinc-500 font-semibold mt-1">
+                    Inspecting completed accomplishments. Kept clean from active workspaces.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    onChange={(e) => { if (e.target.value) { handleExport(e.target.value); e.target.value = ''; } }}
+                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer shadow-sm hover:border-purple-300 transition"
+                  >
+                    <option value="">📊 Export Excel Report</option>
+                    <option value="weekly">Weekly Report</option>
+                    <option value="monthly">Monthly Report</option>
+                    <option value="yearly">Yearly Report</option>
+                    <option value="all">All Tasks</option>
+                  </select>
+                  <button 
+                    onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
+                    className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
-              <button 
-                onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
-                className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition"
-              >
-                Close
-              </button>
-            </div>
-            <div className="flex-1 min-h-0 overflow-y-auto p-6">
-            {loadingArchive ? (
-              <div className="text-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent mx-auto"></div>
+
+              {/* Filtering Controls */}
+              <div className="bg-zinc-50 border-b border-zinc-100 p-4 shrink-0 space-y-3">
+                <div className="flex flex-col md:flex-row gap-3">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+                    <input
+                      type="text"
+                      placeholder="Search archive by description, category..."
+                      value={archiveSearch}
+                      onChange={(e) => { setArchiveSearch(e.target.value); setArchiveCurrentPage(1); }}
+                      className="w-full bg-white border border-zinc-200 rounded-lg pl-9 pr-4 py-2 text-xs focus:outline-none focus:border-purple-500 font-medium"
+                    />
+                  </div>
+                  <div className="w-full md:w-40">
+                    <select
+                      value={archiveYearFilter}
+                      onChange={(e) => { setArchiveYearFilter(e.target.value); setArchiveCurrentPage(1); }}
+                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-purple-500 font-bold"
+                    >
+                      <option value="All">All Years</option>
+                      {uniqueYears.map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-full md:w-40">
+                    <select
+                      value={archiveMonthFilter}
+                      onChange={(e) => { setArchiveMonthFilter(e.target.value); setArchiveCurrentPage(1); }}
+                      className="w-full bg-white border border-zinc-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-purple-500 font-bold"
+                    >
+                      <option value="All">All Months</option>
+                      {months.map((m, idx) => (
+                        <option key={m} value={idx.toString()}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
-            ) : archivedTasks.length === 0 ? (
-              <div className="text-center py-16 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl">
-                No completed or archived tasks are present.
+
+              <div className="flex-1 min-h-0 overflow-y-auto p-6">
+              {loadingArchive ? (
+                <div className="text-center py-20">
+                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500 border-t-transparent mx-auto"></div>
+                </div>
+              ) : filteredArchive.length === 0 ? (
+                <div className="text-center py-16 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl">
+                  No completed or archived tasks are present for the selected filters.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider select-none">
+                        <tr>
+                          <th className="py-2.5 px-4">Task Details</th>
+                          <th className="py-2.5 px-4">Completed Date</th>
+                          <th className="py-2.5 px-4">Evidence</th>
+                          <th className="py-2.5 px-4 text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200">
+                        {paginatedArchive.map((t, idx) => (
+                          <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition`}>
+                            <td className="py-3 px-4">
+                              <div>
+                                <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
+                                  {t.category}
+                                </span>
+                                <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-semibold text-zinc-500">
+                              {new Date(t.updatedAt).toLocaleDateString()}
+                            </td>
+                            <td className="py-3 px-4">
+                              {t.evidenceLink ? (
+                                <a 
+                                  href={t.evidenceLink} 
+                                  target="_blank" 
+                                  rel="noreferrer" 
+                                  className="text-blue-600 font-bold hover:underline"
+                                >
+                                  Evidence Link
+                                </a>
+                              ) : (
+                                <span className="text-zinc-450">None</span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
+                                Completed / Archived
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Premium Pagination controls */}
+                  <div className="flex items-center justify-between border-t border-zinc-100 pt-4 text-xs font-semibold text-zinc-500">
+                    <div>
+                      Showing <span className="text-zinc-800">{startIndex + 1}</span> to <span className="text-zinc-800">{Math.min(startIndex + itemsPerPage, filteredArchive.length)}</span> of <span className="text-zinc-800">{filteredArchive.length}</span> archived tasks
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setArchiveCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPageSafe === 1}
+                        className="px-3 py-1.5 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 rounded-lg disabled:opacity-50 transition font-bold"
+                      >
+                        Previous
+                      </button>
+                      <span className="px-3 py-1.5 bg-zinc-50 border border-zinc-200 rounded-lg text-zinc-700">
+                        Page {currentPageSafe} of {totalPages || 1}
+                      </span>
+                      <button
+                        onClick={() => setArchiveCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPageSafe === totalPages}
+                        className="px-3 py-1.5 bg-zinc-50 border border-zinc-200 hover:bg-zinc-100 rounded-lg disabled:opacity-50 transition font-bold"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               </div>
-            ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-xl max-h-[60vh]">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
-                    <tr>
-                      <th className="py-2.5 px-4">Task Details</th>
-                      <th className="py-2.5 px-4">Completed Date</th>
-                      <th className="py-2.5 px-4">Evidence</th>
-                      <th className="py-2.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-zinc-200">
-                    {archivedTasks.map((t, idx) => (
-                      <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition`}>
-                        <td className="py-3 px-4">
-                          <div>
-                            <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
-                              {t.category}
-                            </span>
-                            <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
-                            {t.remarks && <p className="text-[10px] italic text-zinc-500 mt-0.5">Remarks: {t.remarks}</p>}
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-zinc-500">
-                          {new Date(t.updatedAt).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4">
-                          {t.evidenceLink ? (
-                            <a 
-                              href={t.evidenceLink} 
-                              target="_blank" 
-                              rel="noreferrer" 
-                              className="text-blue-600 font-bold hover:underline"
-                            >
-                              Evidence Link
-                            </a>
-                          ) : (
-                            <span className="text-zinc-450">None</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => handleRestoreTask(t.id)}
-                            className="text-xs bg-zinc-100 hover:bg-zinc-200 font-bold text-zinc-700 px-2 py-1 rounded border border-zinc-200"
-                            title="Restore Task to Active List"
-                          >
-                            Unarchive / Edit
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Nominate Task Modal */}
       {activeModal === 'nominate' && (
@@ -1040,7 +1253,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Period</label>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
                   <select
                     value={nominationPeriod}
                     onChange={(e) => setNominationPeriod(e.target.value)}
@@ -1055,24 +1268,13 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Or Choose Specific Target Date</label>
                 <input
                   type="date"
                   value={targetDate}
                   onChange={(e) => setTargetDate(e.target.value)}
                   disabled={nominationPeriod !== 'custom'}
                   className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none disabled:opacity-50"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Evidence Link (Optional)</label>
-                <input
-                  type="text"
-                  value={evidenceLink}
-                  onChange={(e) => setEvidenceLink(e.target.value)}
-                  placeholder="Google Drive, ELMS URL, etc."
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
                 />
               </div>
 
@@ -1118,8 +1320,17 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                   max="100"
                   step="5"
                   value={editProgress}
-                  onChange={(e) => setEditProgress(parseInt(e.target.value, 10))}
-                  className="w-full h-1.5 bg-zinc-100 rounded-lg appearance-none cursor-pointer accent-green-600"
+                  onChange={(e) => {
+                    const newProgress = parseInt(e.target.value, 10);
+                    setEditProgress(newProgress);
+                    if (newProgress === 100) {
+                      setEditStatus('Completed');
+                    } else if (newProgress < 100 && editStatus === 'Completed') {
+                      setEditStatus('Ongoing');
+                    }
+                  }}
+                  style={{ background: `linear-gradient(to right, #22c55e 0%, #22c55e ${editProgress}%, #e4e4e7 ${editProgress}%, #e4e4e7 100%)` }}
+                  className="w-full h-2 rounded-lg appearance-none cursor-pointer accent-green-600 bg-zinc-200"
                 />
                 <div className="flex justify-between text-[10px] text-zinc-400 font-bold mt-1">
                   <span>0% (Not Started)</span>
@@ -1128,21 +1339,41 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
                 </div>
               </div>
 
-              {/* Remarks */}
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Remarks</label>
-                <input
-                  type="text"
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Status</label>
+                <select
+                  value={editStatus}
+                  onChange={(e) => {
+                    const newStatus = e.target.value;
+                    setEditStatus(newStatus);
+                    if (newStatus === 'Completed') {
+                      setEditProgress(100);
+                    } else if (newStatus === 'Ongoing' && editProgress === 100) {
+                      setEditProgress(95);
+                    }
+                  }}
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
+                >
+                  <option value="Ongoing">Ongoing</option>
+                  <option value="Completed">Completed (Submit for Approval)</option>
+                </select>
+              </div>
+
+              {/* Remarks/Message Textarea */}
+              <div>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Remarks / Message to Supervisor</label>
+                <textarea
+                  rows={2}
                   value={editRemarks}
                   onChange={(e) => setEditRemarks(e.target.value)}
-                  placeholder="Remarks..."
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2 px-3 text-xs focus:bg-white focus:outline-none"
+                  placeholder="Explain your changes or resubmission note..."
+                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none resize-none"
                 />
               </div>
 
               {/* Evidence Link */}
               <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Evidence Link</label>
+                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Evidence Link (Optional)</label>
                 <input
                   type="text"
                   value={editEvidenceLink}
@@ -1254,7 +1485,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger }) {
       )}
   
       {customDialog && (
-        <div className="fixed inset-0 z-[600] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setCustomDialog(null)}>
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 animate-scaleIn text-zinc-900 border border-zinc-200" onClick={e => e.stopPropagation()}>
             <h4 className="font-black text-base text-zinc-900 uppercase tracking-wider mb-2">{customDialog.title}</h4>
             <p className="text-xs text-zinc-500 font-medium mb-6 leading-relaxed">{customDialog.message}</p>

@@ -29,7 +29,13 @@ export async function getSessionUser() {
     const cookieStore = await cookies();
     const token = cookieStore.get('auth_token')?.value;
     if (!token) return null;
-    return verifyToken(token);
+    const decoded = verifyToken(token);
+    if (!decoded) return null;
+    return {
+      ...decoded,
+      id: decoded.id || decoded.userId,
+      userId: decoded.userId || decoded.id
+    };
   } catch (e) {
     return null;
   }
