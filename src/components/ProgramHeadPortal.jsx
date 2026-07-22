@@ -1723,7 +1723,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
       {/* Nominate Task Modal */}
       {activeModal === 'nominate' && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-scaleIn text-zinc-900" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
               <div className="flex items-center gap-2">
                 <div className="p-2 bg-blue-50 rounded-lg"><PlusCircle className="h-5 w-5 text-blue-600" /></div>
@@ -1732,112 +1732,112 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                   <p className="text-[11px] text-zinc-400 font-medium">Submit a personal deliverable for tracking</p>
                 </div>
               </div>
-              <button onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Cancel</button>
+              <button onClick={() => setActiveModal(null)} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Cancel</button>
             </div>
 
-            <div className="flex-1 min-h-0 overflow-y-auto p-6">
-            <form onSubmit={handleCreateSelfTask} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
-                  Assign To / Nominate User(s) (Type letter to filter, Select One or Multiple)
-                </label>
-                <AssigneeCombobox
-                  users={[user, ...facultyList]}
-                  selectedUserIds={assignToUserIds}
-                  onChange={setAssignToUserIds}
-                  placeholder="Type name, letter, or role to filter assignees..."
-                  allowSelf={true}
-                  currentUserId={user.id}
-                />
-              </div>
-              {formError && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-xs font-bold">
-                  {formError}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Category</label>
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  placeholder="e.g. HQ Syllabus, Exam Prep"
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Specific Task Description</label>
-                <textarea
-                  value={taskDescription}
-                  onChange={(e) => setTaskDescription(e.target.value)}
-                  placeholder="Provide details about what you need to achieve..."
-                  rows={3}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
+            <form onSubmit={handleCreateSelfTask} className="flex flex-col flex-1 min-h-0">
+              <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Priority</label>
-                  <select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
-                  >
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">
+                    Assign To / Nominate User(s) (Type letter to filter, Select One or Multiple)
+                  </label>
+                  <AssigneeCombobox
+                    users={[user, ...facultyList]}
+                    selectedUserIds={assignToUserIds}
+                    onChange={setAssignToUserIds}
+                    placeholder="Type name, letter, or role to filter assignees..."
+                    allowSelf={true}
+                    currentUserId={user.id}
+                  />
+                </div>
+                {formError && (
+                  <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-red-800 text-xs font-bold">
+                    {formError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Category</label>
+                  <input
+                    type="text"
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="e.g. HQ Syllabus, Exam Prep"
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
+                    required
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
-                  <select
-                    value={nominationPeriod}
-                    onChange={(e) => setNominationPeriod(e.target.value)}
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
-                  >
-                    <option value="weekly">This Week</option>
-                    <option value="monthly">This Month</option>
-                    <option value="yearly">This Year</option>
-                    <option value="custom">Specific Target Date</option>
-                  </select>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Specific Task Description</label>
+                  <textarea
+                    value={taskDescription}
+                    onChange={(e) => setTaskDescription(e.target.value)}
+                    placeholder="Provide details about what you need to achieve..."
+                    rows={3}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Priority</label>
+                    <select
+                      value={priority}
+                      onChange={(e) => setPriority(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
+                    >
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
+                    <select
+                      value={nominationPeriod}
+                      onChange={(e) => setNominationPeriod(e.target.value)}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
+                    >
+                      <option value="weekly">This Week</option>
+                      <option value="monthly">This Month</option>
+                      <option value="yearly">This Year</option>
+                      <option value="custom">Specific Target Date</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Or Choose Specific Target Date</label>
+                  <input
+                    type="date"
+                    value={targetDate}
+                    onChange={(e) => setTargetDate(e.target.value)}
+                    disabled={nominationPeriod !== 'custom'}
+                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none disabled:opacity-50"
+                  />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Or Choose Specific Target Date</label>
-                <input
-                  type="date"
-                  value={targetDate}
-                  onChange={(e) => setTargetDate(e.target.value)}
-                  disabled={nominationPeriod !== 'custom'}
-                  className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none disabled:opacity-50"
-                />
-              </div>
-
-              <div className="border-t border-zinc-100 pt-4 flex justify-end gap-2">
+              <div className="px-6 py-4 border-t border-zinc-100 flex justify-end gap-2 shrink-0 bg-zinc-50/50">
                 <button
                   type="button"
-                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
-                  className="rounded-lg hover:bg-zinc-50 text-zinc-500 py-2 px-4 text-xs font-bold"
+                  onClick={() => setActiveModal(null)}
+                  className="rounded-lg hover:bg-zinc-100 text-zinc-600 py-2 px-4 text-xs font-bold transition"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 font-bold text-xs shadow disabled:opacity-50"
+                  className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 font-bold text-xs shadow disabled:opacity-50 transition"
                 >
                   {submitting ? 'Nominating...' : 'Submit'}
                 </button>
               </div>
             </form>
-            </div>
           </div>
         </div>
       )}

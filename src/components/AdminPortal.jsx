@@ -1856,7 +1856,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       {/* Nominate / Assign task modal */}
       {activeModal === 'nominate' && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden animate-scaleIn text-zinc-900" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 shrink-0">
               <div className="flex items-center gap-2">
@@ -1866,7 +1866,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                   <p className="text-[11px] text-zinc-400 font-medium">Create and delegate institutional deliverables</p>
                 </div>
               </div>
-              <button onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Close</button>
+              <button onClick={() => setActiveModal(null)} className="text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition">✕ Close</button>
             </div>
 
             <form onSubmit={handleAssignTask} className="flex flex-col flex-1 min-h-0">
@@ -1959,7 +1959,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
               <div className="shrink-0 border-t border-zinc-100 px-6 py-4 flex justify-end gap-3 bg-zinc-50/50">
                 <button
                   type="button"
-                  onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
+                  onClick={() => setActiveModal(null)}
                   className="rounded-lg hover:bg-zinc-100 text-zinc-500 py-2 px-5 text-xs font-bold border border-zinc-200 transition"
                 >
                   Cancel
