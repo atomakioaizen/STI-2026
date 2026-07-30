@@ -1,8 +1,10 @@
+require('dotenv').config();
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const pg = require('pg');
 
-const dbUrl = process.env.DATABASE_URL || 'postgresql://postgres.kpdjtiusfcdabmjkemfm:4723670enteR!@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres';
+const rawUrl = process.env.DATABASE_URL || 'postgresql://postgres:4723670enteR!@db.kpdjtiusfcdabmjkemfm.supabase.co:5432/postgres';
+const dbUrl = rawUrl.trim().replace(/\\n/g, '');
 const pool = new pg.Pool({ connectionString: dbUrl });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
