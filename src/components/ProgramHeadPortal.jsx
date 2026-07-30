@@ -618,12 +618,11 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
       return;
     }
 
-    const selfUserId = user?.id || user?.userId;
-    const selectedIds = assignToUserIds.length > 0
-      ? assignToUserIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
-      : (assignToUserId && !isNaN(parseInt(assignToUserId, 10))
-          ? [parseInt(assignToUserId, 10)]
-          : (selfUserId ? [parseInt(selfUserId, 10)] : []));
+    const selectedIds = assignToUserIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+    if (selectedIds.length === 0) {
+      setFormError('Please select at least one assignee name / user before assigning.');
+      return;
+    }
 
     setFormError('');
     setSubmitting(true);
@@ -1179,7 +1178,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200">
-                      {[...facultyTasks].sort((a, b) => {
+                      {[...filteredFacultyTasks].sort((a, b) => {
                         let aVal = sortField.includes('.') ? getVal(a, sortField) : a[sortField];
                         let bVal = sortField.includes('.') ? getVal(b, sortField) : b[sortField];
                         if (sortField === 'targetDate') {
@@ -1383,7 +1382,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-zinc-100">
-                    {myTasks.sort((a, b) => {
+                    {filteredMyTasks.sort((a, b) => {
                       let aVal = a[sortField];
                       let bVal = b[sortField];
                       if (sortField === 'targetDate') {

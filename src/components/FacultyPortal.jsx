@@ -796,7 +796,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-250">
-                      {[...tasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
+                      {[...filteredTasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
                         let aVal = a[sortField];
                         let bVal = b[sortField];
                         if (sortField === 'targetDate' || sortField === 'entryDate') {

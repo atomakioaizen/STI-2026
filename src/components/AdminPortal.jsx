@@ -245,9 +245,6 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users);
-        if (data.users.length > 0 && !taskAssigneeId) {
-          setTaskAssigneeId(data.users[0].id.toString());
-        }
       }
     } catch (err) {
       console.error('Error fetching users:', err);
@@ -489,9 +486,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
   const handleAssignTask = async (e) => {
       e.preventDefault();
-      const selectedIds = taskAssigneeIds.length > 0 
-        ? taskAssigneeIds 
-        : (taskAssigneeId ? [parseInt(taskAssigneeId, 10)] : []);
+      const selectedIds = taskAssigneeIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
 
       if (selectedIds.length === 0) {
         setTaskFormError('Please select at least one assignee name / user before assigning.');
@@ -509,9 +504,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       });
     };
     const executeAssignTask = async () => {
-    const selectedIds = taskAssigneeIds.length > 0 
-      ? taskAssigneeIds 
-      : (taskAssigneeId ? [parseInt(taskAssigneeId, 10)] : []);
+    const selectedIds = taskAssigneeIds.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
 
     if (!taskCategory.trim() || !taskDescription.trim() || selectedIds.length === 0 || !taskTargetDate) {
       setTaskFormError('Category, Description, Assignee(s), and Target Date are required.');
@@ -1232,7 +1225,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200">
-                      {[...tasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
+                      {[...filteredTasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
                         let aVal = sortField.includes('.') ? getVal(a, sortField) : a[sortField];
                         let bVal = sortField.includes('.') ? getVal(b, sortField) : b[sortField];
                         if (sortField === 'targetDate') {
