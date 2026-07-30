@@ -5,7 +5,8 @@ import pg from 'pg';
 const globalForPrisma = globalThis;
 
 function createPrismaClient() {
-  const dbUrl = process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
+  const rawUrl = process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
+  const dbUrl = rawUrl.trim().replace(/\\n/g, '');
   const pool = new pg.Pool({ connectionString: dbUrl });
   const adapter = new PrismaPg(pool);
   return new PrismaClient({ adapter });
