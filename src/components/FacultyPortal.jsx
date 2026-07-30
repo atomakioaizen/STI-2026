@@ -76,7 +76,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
   useEffect(() => {
     fetchTasks();
     fetchArchivedTasks();
-  }, [statusFilter, priorityFilter]);
+  }, [statusFilter, priorityFilter, searchQuery]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -761,16 +761,28 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
               </div>
 
               {/* Table Area */}
-              {loading ? (
-                <div className="text-center py-20">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent mx-auto"></div>
-                </div>
-              ) : tasks.length === 0 ? (
-                <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
-                  <p className="text-sm font-semibold">No active tasks found.</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+              {(() => {
+                const filteredTasks = tasks.filter(t => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase().trim();
+                  return (
+                    t.taskDescription?.toLowerCase().includes(q) ||
+                    t.category?.toLowerCase().includes(q) ||
+                    t.status?.toLowerCase().includes(q) ||
+                    t.priority?.toLowerCase().includes(q)
+                  );
+                });
+
+                return loading ? (
+                  <div className="text-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent mx-auto"></div>
+                  </div>
+                ) : filteredTasks.length === 0 ? (
+                  <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
+                    <p className="text-sm font-semibold">No active tasks found matching criteria.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                       <tr>
@@ -962,10 +974,11 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
                   </tbody>
                 </table>
               </div>
-            )}
+            );
+          })()}
+        </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* Alerts / Inbox Modal */}
@@ -1000,7 +1013,9 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
             const query = archiveSearch.toLowerCase();
             const desc = t.taskDescription?.toLowerCase() || '';
             const cat = t.category?.toLowerCase() || '';
-            if (!desc.includes(query) && !cat.includes(query)) return false;
+            const status = t.status?.toLowerCase() || '';
+            const priority = t.priority?.toLowerCase() || '';
+            if (!desc.includes(query) && !cat.includes(query) && !status.includes(query) && !priority.includes(query)) return false;
           }
           if (archiveMonthFilter !== 'All') {
             const month = new Date(t.updatedAt).getMonth();

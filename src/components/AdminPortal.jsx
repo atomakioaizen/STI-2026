@@ -184,7 +184,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     fetchArchivedTasks();
     fetchUsers();
     fetchDepartments();
-  }, [statusFilter, priorityFilter, timeframeFilter, deptFilter, selectedUserFilter]);
+  }, [statusFilter, priorityFilter, timeframeFilter, deptFilter, selectedUserFilter, searchQuery]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -489,6 +489,21 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
   const handleAssignTask = async (e) => {
       e.preventDefault();
+      const selectedIds = taskAssigneeIds.length > 0 
+        ? taskAssigneeIds 
+        : (taskAssigneeId ? [parseInt(taskAssigneeId, 10)] : []);
+
+      if (selectedIds.length === 0) {
+        setTaskFormError('Please select at least one assignee name / user before assigning.');
+        return;
+      }
+
+      if (!taskCategory.trim() || !taskDescription.trim() || !taskTargetDate) {
+        setTaskFormError('Category, Description, Assignee(s), and Target Date are required.');
+        return;
+      }
+
+      setTaskFormError('');
       triggerConfirm('Assign Deliverable', 'Are you sure you want to create and assign this deliverable?', () => {
         executeAssignTask();
       });
@@ -1181,16 +1196,30 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                 </button>
               </div>
 
-              {loading ? (
-                <div className="text-center py-20">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
-                </div>
-              ) : tasks.length === 0 ? (
-                <div className="text-center py-16 text-zinc-550 bg-zinc-50 border border-zinc-200 rounded-xl">
-                  No active tasks found matching criteria.
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+              {(() => {
+                const filteredTasks = tasks.filter(t => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase().trim();
+                  return (
+                    t.taskDescription?.toLowerCase().includes(q) ||
+                    t.category?.toLowerCase().includes(q) ||
+                    t.user?.name?.toLowerCase().includes(q) ||
+                    t.user?.department?.name?.toLowerCase().includes(q) ||
+                    t.status?.toLowerCase().includes(q) ||
+                    t.priority?.toLowerCase().includes(q)
+                  );
+                });
+
+                return loading ? (
+                  <div className="text-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
+                  </div>
+                ) : filteredTasks.length === 0 ? (
+                  <div className="text-center py-16 text-zinc-550 bg-zinc-50 border border-zinc-200 rounded-xl">
+                    No active tasks found matching criteria.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                       <tr>
@@ -1322,10 +1351,11 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -1727,7 +1757,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                   const desc = t.taskDescription?.toLowerCase() || '';
                   const cat = t.category?.toLowerCase() || '';
                   const owner = t.user?.name?.toLowerCase() || '';
-                  if (!desc.includes(query) && !cat.includes(query) && !owner.includes(query)) return false;
+                  const dept = t.user?.department?.name?.toLowerCase() || '';
+                  const status = t.status?.toLowerCase() || '';
+                  const priority = t.priority?.toLowerCase() || '';
+                  if (!desc.includes(query) && !cat.includes(query) && !owner.includes(query) && !dept.includes(query) && !status.includes(query) && !priority.includes(query)) return false;
                 }
                 if (archiveMonthFilter !== 'All') {
                   const month = new Date(t.updatedAt || t.createdAt).getMonth();

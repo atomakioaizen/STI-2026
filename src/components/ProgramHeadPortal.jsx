@@ -62,6 +62,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
   const [timeframeFilter, setTimeframeFilter] = useState('All');
   const [selectedFacultyId, setSelectedFacultyId] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [myTasksSearch, setMyTasksSearch] = useState('');
   const [sortField, setSortField] = useState('targetDate');
   const [sortDirection, setSortDirection] = useState('asc');
 
@@ -144,7 +145,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
     fetchTasks();
     fetchArchivedTasks();
     fetchFaculty();
-  }, [statusFilter, priorityFilter, timeframeFilter, selectedFacultyId]);
+  }, [statusFilter, priorityFilter, timeframeFilter, selectedFacultyId, searchQuery]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -595,6 +596,18 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
 
   const handleCreateSelfTask = async (e) => {
       e.preventDefault();
+
+      if (!category.trim() || !taskDescription.trim() || !priority || !targetDate) {
+        setFormError('Please fill in Category, Task Description, Priority, and Target Date.');
+        return;
+      }
+
+      if (assignToUserIds.length === 0) {
+        setFormError('Please select at least one assignee name / user before assigning.');
+        return;
+      }
+
+      setFormError('');
       triggerConfirm('Submit Nomination', 'Are you sure you want to submit this self-nominated task?', () => {
         executeCreateSelfTask();
       });
@@ -1131,16 +1144,29 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
               </div>
 
               {/* List */}
-              {loading ? (
-                <div className="text-center py-20">
-                  <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
-                </div>
-              ) : facultyTasks.length === 0 ? (
-                <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
-                  No active faculty tasks found.
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+              {(() => {
+                const filteredFacultyTasks = facultyTasks.filter(t => {
+                  if (!searchQuery.trim()) return true;
+                  const q = searchQuery.toLowerCase().trim();
+                  return (
+                    t.taskDescription?.toLowerCase().includes(q) ||
+                    t.category?.toLowerCase().includes(q) ||
+                    t.user?.name?.toLowerCase().includes(q) ||
+                    t.status?.toLowerCase().includes(q) ||
+                    t.priority?.toLowerCase().includes(q)
+                  );
+                });
+
+                return loading ? (
+                  <div className="text-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
+                  </div>
+                ) : filteredFacultyTasks.length === 0 ? (
+                  <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
+                    No active faculty tasks found matching criteria.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                       <tr>
@@ -1243,11 +1269,12 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                   </tbody>
                 </table>
               </div>
-            )}
+            );
+          })()}
           </div>
         </div>
       </div>
-      )}
+    )}
 
       {/* My Personal Tasks Modal */}
       {activeModal === 'my_tasks' && (
@@ -1267,6 +1294,18 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              {/* Search & Filter Bar for My Self Tasks */}
+              <div className="mb-4 relative flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="Search my self-tasks by category, description, priority, status..."
+                  value={myTasksSearch}
+                  onChange={(e) => setMyTasksSearch(e.target.value)}
+                  className="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-8 pr-3 text-xs focus:outline-none focus:border-blue-500 font-medium shadow-xs"
+                />
+                <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-zinc-400" />
+              </div>
+
               {/* Sorting Bar */}
               <div className="flex items-center gap-2 mb-4 bg-blue-50/50 p-2.5 rounded-lg border border-blue-100 text-xs text-blue-900">
                 <span className="font-bold">Sort Tasks By:</span>
@@ -1311,16 +1350,28 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                 </button>
               </div>
 
-            {loading ? (
-              <div className="text-center py-20">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
-              </div>
-            ) : myTasks.length === 0 ? (
-              <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
-                No self-nominated tasks found.
-              </div>
-            ) : (
-              <div className="overflow-x-auto border border-zinc-200 rounded-xl">
+              {(() => {
+                const filteredMyTasks = myTasks.filter(t => {
+                  if (!myTasksSearch.trim()) return true;
+                  const q = myTasksSearch.toLowerCase().trim();
+                  return (
+                    t.taskDescription?.toLowerCase().includes(q) ||
+                    t.category?.toLowerCase().includes(q) ||
+                    t.status?.toLowerCase().includes(q) ||
+                    t.priority?.toLowerCase().includes(q)
+                  );
+                });
+
+                return loading ? (
+                  <div className="text-center py-20">
+                    <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 mx-auto"></div>
+                  </div>
+                ) : filteredMyTasks.length === 0 ? (
+                  <div className="text-center py-16 text-zinc-500 bg-zinc-50 border border-zinc-200 rounded-xl">
+                    No self-nominated tasks found matching criteria.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto border border-zinc-200 rounded-xl">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-zinc-50 border-b border-zinc-200 text-zinc-500 font-bold uppercase tracking-wider">
                     <tr>
@@ -1488,10 +1539,11 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                   </tbody>
                 </table>
               </div>
-            )}
-            </div>
+            );
+          })()}
           </div>
         </div>
+      </div>
       )}
 
 
@@ -1530,7 +1582,9 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
             const desc = t.taskDescription?.toLowerCase() || '';
             const cat = t.category?.toLowerCase() || '';
             const owner = t.user?.name?.toLowerCase() || '';
-            if (!desc.includes(query) && !cat.includes(query) && !owner.includes(query)) return false;
+            const status = t.status?.toLowerCase() || '';
+            const priority = t.priority?.toLowerCase() || '';
+            if (!desc.includes(query) && !cat.includes(query) && !owner.includes(query) && !status.includes(query) && !priority.includes(query)) return false;
           }
           if (archiveMonthFilter !== 'All') {
             const month = new Date(t.updatedAt).getMonth();
