@@ -184,7 +184,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     fetchArchivedTasks();
     fetchUsers();
     fetchDepartments();
-  }, [statusFilter, priorityFilter, timeframeFilter, deptFilter, selectedUserFilter, searchQuery]);
+  }, [statusFilter, priorityFilter, timeframeFilter, deptFilter]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -203,8 +203,6 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
       if (timeframeFilter !== 'All') url.searchParams.append('timeframe', timeframeFilter);
       if (deptFilter !== 'All') url.searchParams.append('departmentId', deptFilter);
-      if (selectedUserFilter !== 'All') url.searchParams.append('userId', selectedUserFilter);
-      if (searchQuery.trim() !== '') url.searchParams.append('search', searchQuery);
       
       const res = await fetch(url.toString());
       if (res.ok) {
@@ -1191,6 +1189,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
               {(() => {
                 const filteredTasks = tasks.filter(t => {
+                  if (selectedUserFilter !== 'All' && Number(t.userId) !== Number(selectedUserFilter)) return false;
                   if (!searchQuery.trim()) return true;
                   const q = searchQuery.toLowerCase().trim();
                   return (

@@ -76,7 +76,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
   useEffect(() => {
     fetchTasks();
     fetchArchivedTasks();
-  }, [statusFilter, priorityFilter, searchQuery]);
+  }, [statusFilter, priorityFilter]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -116,7 +116,6 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
       url.searchParams.append('archived', 'false');
       if (statusFilter !== 'All') url.searchParams.append('status', statusFilter);
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
-      if (searchQuery.trim() !== '') url.searchParams.append('search', searchQuery);
       
       const res = await fetch(url.toString());
       if (res.ok) {

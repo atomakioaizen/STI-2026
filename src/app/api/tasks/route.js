@@ -175,10 +175,20 @@ export async function GET(request) {
     // Archived filter: default to archived = false
     const archivedParam = searchParams.get('archived');
     if (archivedParam === 'true') {
-      where.OR = [
+      const archiveOR = [
         { archived: true },
         { status: 'Completed' }
       ];
+      if (where.OR) {
+        where.AND = [
+          ...(where.AND || []),
+          { OR: where.OR },
+          { OR: archiveOR }
+        ];
+        delete where.OR;
+      } else {
+        where.OR = archiveOR;
+      }
     } else if (archivedParam === 'all') {
       // Do not filter by archived
     } else {
@@ -198,25 +208,28 @@ export async function GET(request) {
     if (search && search.trim() !== '') {
       const cleanSearch = search.trim();
       const searchConditions = [
-        { taskDescription: { contains: cleanSearch } },
-        { category: { contains: cleanSearch } },
+        { taskDescription: { contains: cleanSearch, mode: 'insensitive' } },
+        { category: { contains: cleanSearch, mode: 'insensitive' } },
         {
           user: {
-            name: { contains: cleanSearch }
+            name: { contains: cleanSearch, mode: 'insensitive' }
           }
         }
       ];
 
       // Merge with where clauses cleanly
       if (where.OR) {
-        // If we already have OR conditions (e.g. Program Head portal visibility), handle it
         where.AND = [
+          ...(where.AND || []),
           { OR: where.OR },
           { OR: searchConditions }
         ];
         delete where.OR;
       } else {
-        where.OR = searchConditions;
+        where.AND = [
+          ...(where.AND || []),
+          { OR: searchConditions }
+        ];
       }
     }
 

@@ -145,7 +145,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
     fetchTasks();
     fetchArchivedTasks();
     fetchFaculty();
-  }, [statusFilter, priorityFilter, timeframeFilter, selectedFacultyId, searchQuery]);
+  }, [statusFilter, priorityFilter, timeframeFilter]);
 
   useEffect(() => {
     if (taskTrigger && setTaskTrigger) {
@@ -192,8 +192,6 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
       if (statusFilter !== 'All') url.searchParams.append('status', statusFilter);
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
       if (timeframeFilter !== 'All') url.searchParams.append('timeframe', timeframeFilter);
-      if (selectedFacultyId !== 'All') url.searchParams.append('userId', selectedFacultyId);
-      if (searchQuery.trim() !== '') url.searchParams.append('search', searchQuery);
       
       const res = await fetch(url.toString());
       if (res.ok) {
@@ -1145,6 +1143,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
               {/* List */}
               {(() => {
                 const filteredFacultyTasks = facultyTasks.filter(t => {
+                  if (selectedFacultyId !== 'All' && Number(t.userId) !== Number(selectedFacultyId)) return false;
                   if (!searchQuery.trim()) return true;
                   const q = searchQuery.toLowerCase().trim();
                   return (
