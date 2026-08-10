@@ -59,9 +59,10 @@ export async function POST(request) {
       path: '/'
     });
 
-    // Log the login activity
-    const { logActivity } = await import('@/lib/activity');
-    await logActivity(user.id, 'LOGIN', `User ${user.username} logged in successfully.`);
+    // Log the login activity asynchronously without delaying response
+    import('@/lib/activity').then(({ logActivity }) => {
+      logActivity(user.id, 'LOGIN', `User ${user.username} logged in successfully.`).catch(() => {});
+    }).catch(() => {});
 
     return NextResponse.json({
       success: true,

@@ -8,10 +8,12 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loginSuccess, setLoginSuccess] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
+    router.prefetch('/dashboard');
     async function checkSession() {
       try {
         const res = await fetch('/api/auth/me');
@@ -48,12 +50,13 @@ export default function LoginPage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || 'Invalid credentials. Please try again.');
+        setLoading(false);
       } else {
+        setLoginSuccess(true);
         router.push('/dashboard');
       }
     } catch (err) {
       setError('Connection error. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
@@ -128,13 +131,22 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-zinc-900 py-3.5 px-4 text-sm font-bold text-white shadow-lg shadow-zinc-900/25 hover:bg-zinc-800 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:pointer-events-none mt-2 cursor-pointer"
+            disabled={loading || loginSuccess}
+            className={`w-full rounded-xl py-3.5 px-4 text-sm font-bold text-white shadow-lg transition-all duration-300 disabled:pointer-events-none mt-2 cursor-pointer ${
+              loginSuccess 
+                ? 'bg-emerald-600 shadow-emerald-600/30 scale-[1.02]' 
+                : 'bg-zinc-900 shadow-zinc-900/25 hover:bg-zinc-800 active:scale-[0.98]'
+            }`}
           >
-            {loading ? (
+            {loginSuccess ? (
+              <span className="flex items-center justify-center gap-2 animate-fadeIn">
+                <span className="h-4 w-4 rounded-full bg-white text-emerald-600 flex items-center justify-center text-[10px] font-black">✓</span>
+                Credentials Verified! Accessing Portal...
+              </span>
+            ) : loading ? (
               <span className="flex items-center justify-center gap-2">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Signing in...
+                Authenticating...
               </span>
             ) : (
               'Sign In'
