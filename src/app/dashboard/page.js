@@ -14,16 +14,33 @@ export default async function DashboardPage() {
 
   const decodedUser = verifyToken(token);
   if (!decodedUser) {
+    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
     redirect('/');
   }
 
-  // Fetch full user details from DB to make sure we are in sync
-  const user = await prisma.user.findUnique({
-    where: { id: decodedUser.userId },
-    include: { department: true }
-  });
+  const userId = decodedUser.userId || decodedUser.id;
+  if (!userId) {
+    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
+    redirect('/');
+  }
+
+  // Fetch full user details from DB to make sure we are in sync (with automatic reconnect retry)
+  let user = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { department: true }
+      });
+      if (user) break;
+    } catch (e) {
+      console.warn(`Prisma findUnique attempt ${attempt + 1} failed, retrying...`, e?.message);
+      await new Promise(r => setTimeout(r, 500));
+    }
+  }
 
   if (!user) {
+    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
     redirect('/');
   }
 

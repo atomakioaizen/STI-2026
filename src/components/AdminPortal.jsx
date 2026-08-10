@@ -11,7 +11,8 @@ import InsightsView from './InsightsView';
 import SuperAlertModal from './SuperAlertModal';
 import AssigneeCombobox from './AssigneeCombobox';
 import { exportTasksToExcel } from '@/lib/reports';
-import { getTaskActorInfo } from '@/lib/taskHelpers';
+import { generateProfessionalExcelReport } from '@/lib/excelReport';
+import { getTaskActorInfo, getPendingElapsedInfo } from '@/lib/taskHelpers';
 
 const renderRemarksLog = (remarksStr) => {
   if (!remarksStr) return null;
@@ -63,7 +64,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
   };
 
-  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY: 1, STAFF: 1, FACULTY_STAFF: 1 };
+  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, ADMIN: 4, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY: 1, STAFF: 1, FACULTY_STAFF: 1 };
   const userLevel = ROLE_LEVELS[user.role] || 0;
   const availableRoles = [
     { value: 'FACULTY', label: 'Faculty (Academic)', level: 1 },
@@ -264,24 +265,42 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     }
   }
 
-  const handleExport = (timeframe) => {
+  const handleExport = (timeframe, scope = 'all') => {
     const now = new Date();
     let filtered = [...tasks, ...archivedTasks];
-    let title = 'Institution Tasks Report';
+
+    if (scope === 'individual') {
+      filtered = filtered.filter(t => Number(t.userId) === Number(user.id));
+    } else if (scope === 'department') {
+      filtered = filtered.filter(t => (t.user?.departmentId && t.user.departmentId === user.departmentId) || t.departmentId === user.departmentId);
+    }
+
+    let timeframeLabel = 'All Time (5-Year Historical Archive)';
     if (timeframe === 'weekly') {
       const ago = new Date(); ago.setDate(now.getDate() - 7);
       filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
-      title = 'Weekly Tasks Report';
+      timeframeLabel = 'Weekly Accomplishment Report (Last 7 Days)';
     } else if (timeframe === 'monthly') {
       const ago = new Date(); ago.setMonth(now.getMonth() - 1);
       filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
-      title = 'Monthly Tasks Report';
+      timeframeLabel = 'Monthly Accomplishment Report (Last 30 Days)';
     } else if (timeframe === 'yearly') {
       const ago = new Date(); ago.setFullYear(now.getFullYear() - 1);
       filtered = filtered.filter(t => new Date(t.entryDate || t.createdAt) >= ago);
-      title = 'Yearly Tasks Report';
+      timeframeLabel = 'Yearly Accomplishment Report (Current Year)';
     }
-    exportTasksToExcel(filtered, title);
+
+    const reportTitle = scope === 'individual' ? `${user.name.toUpperCase()} - INDIVIDUAL ACCOMPLISHMENTS REPORT`
+      : scope === 'department' ? `${user.departmentName || 'DEPARTMENT'} - DEPARTMENTAL ACCOMPLISHMENTS REPORT`
+      : 'INSTITUTIONAL DELIVERABLES & ACCOMPLISHMENTS REPORT';
+
+    generateProfessionalExcelReport({
+      tasks: filtered,
+      user,
+      users,
+      reportTitle,
+      timeframeLabel
+    });
   };
 
   const handleSearchSubmit = (e) => {
@@ -426,10 +445,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         payload.password = editUserPassword;
       }
 
-      const res = await fetch(`/api/users`, {
-        method: 'PUT',
+      const res = await fetch(`/api/users/${editingUser.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingUser.id, ...payload })
+        body: JSON.stringify(payload)
       });
 
       if (res.ok) {
@@ -823,16 +842,32 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       )}
       
       {/* Greetings Banner */}
-      <div className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shadow-sm">
-        <div>
+      <div className="bg-white border border-zinc-200 rounded-2xl p-6 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 shadow-sm">
+        <div className="flex-1">
           <h2 className="text-2xl font-black text-zinc-900">Administrator Console</h2>
           <p className="text-zinc-500 text-sm mt-1 font-medium">
             Manage institutional users, departments, set task deadlines, and monitor compliance.
           </p>
         </div>
+
+        {/* Real-time STI Completed Tasks Compact Stat Badge */}
+        <div className="flex items-center gap-2.5 bg-emerald-50/90 border border-emerald-200/80 rounded-xl px-3.5 py-2 shrink-0">
+          <div className="p-1 bg-emerald-500 text-white rounded-lg">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide">
+              Total STI Tasks Completed:
+            </span>
+            <span className="text-sm font-black text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-lg">
+              {archivedTasks.length + tasks.filter(t => t.status === 'Completed' || t.progress === 100).length}
+            </span>
+          </div>
+        </div>
+
         <button
           onClick={() => setActiveModal('nominate')}
-          className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 shadow transition duration-200 active:scale-95 text-sm"
+          className="flex items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 shadow transition duration-200 active:scale-95 text-sm shrink-0"
         >
           <Plus className="h-4 w-4" />
           Assign Task to User
@@ -1052,7 +1087,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
       {activeModal === 'insights' && user.role === 'SCHOOL_ADMIN' && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden p-6" style={{maxHeight:'88vh'}} onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl flex flex-col overflow-hidden p-6" style={{ height: '85vh', maxHeight: '85vh' }} onClick={e => e.stopPropagation()}>
             <InsightsView onClose={() => setActiveModal(null)} />
           </div>
         </div>
@@ -1075,14 +1110,28 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
               </div>
               <div className="flex items-center gap-2">
                 <select
-                  onChange={(e) => { if (e.target.value) { handleExport(e.target.value); e.target.value = ''; } }}
-                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const [tf, scope] = e.target.value.split(':');
+                      handleExport(tf, scope || 'all');
+                      e.target.value = '';
+                    }
+                  }}
+                  className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer shadow-xs"
                 >
-                  <option value="">📊 Export Excel Report</option>
-                  <option value="weekly">Weekly Report</option>
-                  <option value="monthly">Monthly Report</option>
-                  <option value="yearly">Yearly Report</option>
-                  <option value="all">All Tasks</option>
+                  <option value="">📊 Export Accomplishments to Excel ▾</option>
+                  <optgroup label="👤 My Individual Accomplishments">
+                    <option value="weekly:individual">My Weekly Accomplishments (Last 7 Days)</option>
+                    <option value="monthly:individual">My Monthly Accomplishments (Last 30 Days)</option>
+                    <option value="yearly:individual">My Yearly Accomplishments (Current Year)</option>
+                    <option value="all:individual">My Full Accomplishment Archive (5-Year)</option>
+                  </optgroup>
+                  <optgroup label="🏢 Institutional / Full Report">
+                    <option value="weekly:all">Institutional Weekly Report (Last 7 Days)</option>
+                    <option value="monthly:all">Institutional Monthly Report (Last 30 Days)</option>
+                    <option value="yearly:all">Institutional Yearly Report (Current Year)</option>
+                    <option value="all:all">Full Institutional Archive (5-Year)</option>
+                  </optgroup>
                 </select>
                 <button 
                   onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
@@ -1123,14 +1172,16 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none"
+                      className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs focus:outline-none font-bold"
                     >
                       <option value="All">All Statuses</option>
-                      <option value="Not Started">Not Started</option>
-                      <option value="Ongoing">Ongoing</option>
+                      <option value="Pending Acceptance">Pending Acceptance</option>
+                      <option value="Ongoing">Ongoing (In Progress)</option>
                       <option value="Awaiting Approval">Awaiting Approval</option>
                       <option value="Awaiting Deletion">Awaiting Deletion</option>
-                      <option value="Delayed">Delayed</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Delayed">Delayed ⚠️</option>
+                      <option value="Rejected">Rejected</option>
                     </select>
 
                     <button
@@ -1217,7 +1268,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                       <tr>
                         <th className="py-3 px-4">Owner</th>
                         <th className="py-3 px-4">Task Details</th>
-                        <th className="py-3 px-4">Deadline</th>
+                        <th className="py-3 px-4">Date Nominated / Created</th>
+                        <th className="py-3 px-4">Target Deadline Date</th>
                         <th className="py-3 px-4">Priority</th>
                         <th className="py-3 px-4">Progress / Status</th>
                         <th className="py-3 px-4 text-right">Review Action</th>
@@ -1303,6 +1355,16 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                                             {actorInfo.lastActionType}: {actorInfo.lastActionBy}
                                           </span>
                                         )}
+                                        {(() => {
+                                          const elapsed = getPendingElapsedInfo(task);
+                                          if (!elapsed) return null;
+                                          return (
+                                            <span className={`px-1.5 py-0.5 rounded border font-bold inline-flex items-center gap-0.5 ${elapsed.badgeClass}`}>
+                                              <Clock className="h-2.5 w-2.5" />
+                                              ⏳ {elapsed.text}
+                                            </span>
+                                          );
+                                        })()}
                                       </>
                                     );
                                   })()}
@@ -1310,7 +1372,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                               </div>
                             </td>
                             <td className="py-4 px-4 text-zinc-500 font-semibold">
-                              {task.targetDate ? new Date(task.targetDate).toLocaleDateString() : 'No Target'}
+                              {task.entryDate ? new Date(task.entryDate).toLocaleDateString('en-US', { dateStyle: 'short' }) : 'N/A'}
+                            </td>
+                            <td className="py-4 px-4 text-zinc-800 font-bold">
+                              {task.targetDate ? new Date(task.targetDate).toLocaleDateString('en-US', { dateStyle: 'short' }) : 'No Target'}
                             </td>
                             <td className="py-4 px-4">
                               <span className={`inline-block rounded px-2 py-0.5 font-bold ${prioColor}`}>
@@ -1372,6 +1437,12 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                       setNewUserUsername('');
                       setNewUserPassword('');
                       setNewUserPosition('');
+                      const initialRole = availableRoles[0]?.value || 'FACULTY';
+                      setNewUserRole(initialRole);
+                      const filteredDepts = departments.filter(d => initialRole === 'STAFF' ? d.name === 'Admin' : d.name !== 'Admin');
+                      if (filteredDepts.length > 0) {
+                        setNewUserDeptId(filteredDepts[0].id.toString());
+                      }
                       setUserFormError('');
                     }
                   }}
@@ -1684,14 +1755,28 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
               </div>
                 <div className="flex items-center gap-2">
                   <select
-                    onChange={(e) => { if (e.target.value) { handleExport(e.target.value); e.target.value = ''; } }}
-                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer shadow-sm hover:border-purple-300 transition"
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const [tf, scope] = e.target.value.split(':');
+                        handleExport(tf, scope || 'all');
+                        e.target.value = '';
+                      }
+                    }}
+                    className="rounded-lg border border-zinc-200 bg-white py-1.5 px-3 text-xs font-bold text-zinc-700 focus:outline-none cursor-pointer shadow-xs hover:border-purple-300 transition"
                   >
-                    <option value="">📊 Export Excel Report</option>
-                    <option value="weekly">Weekly Report</option>
-                    <option value="monthly">Monthly Report</option>
-                    <option value="yearly">Yearly Report</option>
-                    <option value="all">All Tasks</option>
+                    <option value="">📊 Export Accomplishments to Excel ▾</option>
+                    <optgroup label="👤 My Individual Accomplishments">
+                      <option value="weekly:individual">My Weekly Accomplishments (Last 7 Days)</option>
+                      <option value="monthly:individual">My Monthly Accomplishments (Last 30 Days)</option>
+                      <option value="yearly:individual">My Yearly Accomplishments (Current Year)</option>
+                      <option value="all:individual">My Full Accomplishment Archive (5-Year)</option>
+                    </optgroup>
+                    <optgroup label="🏢 Institutional / Full Report">
+                      <option value="weekly:all">Institutional Weekly Report (Last 7 Days)</option>
+                      <option value="monthly:all">Institutional Monthly Report (Last 30 Days)</option>
+                      <option value="yearly:all">Institutional Yearly Report (Current Year)</option>
+                      <option value="all:all">Full Institutional Archive (5-Year)</option>
+                    </optgroup>
                   </select>
                   <button 
                     onClick={(e) => { if (e.target === e.currentTarget) setActiveModal(null); }}
@@ -1941,39 +2026,76 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Priority</label>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">🔒 Priority (Auto-Calculated by Urgency)</label>
                     <select
                       value={taskPriority}
-                      onChange={(e) => setTaskPriority(e.target.value)}
-                      className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
+                      disabled={true}
+                      className="w-full rounded-lg border border-zinc-200 bg-zinc-100/90 py-2.5 px-3 text-xs focus:outline-none cursor-not-allowed font-bold text-zinc-700 select-none"
                     >
-                      <option value="High">High</option>
-                      <option value="Medium">Medium</option>
-                      <option value="Low">Low</option>
+                      <option value="High">High (Urgent: Today / 1-3 Days)</option>
+                      <option value="Medium">Medium (Moderate: 4-7 Days)</option>
+                      <option value="Low">Low (Longer: &gt; 7 Days)</option>
                     </select>
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Target Completion Date</label>
+                    <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">🎯 Target Deadline Period</label>
                     <select
                       value={taskNominationPeriod}
-                      onChange={(e) => setTaskNominationPeriod(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setTaskNominationPeriod(val);
+                        const d = new Date();
+                        if (val === 'daily' || val === 'today') {
+                          const dateStr = d.toISOString().split('T')[0];
+                          setTaskTargetDate(dateStr);
+                          setTaskPriority('High');
+                        } else if (val === 'weekly') {
+                          d.setDate(d.getDate() + 7);
+                          setTaskTargetDate(d.toISOString().split('T')[0]);
+                          setTaskPriority('Medium');
+                        } else if (val === 'monthly') {
+                          d.setDate(d.getDate() + 30);
+                          setTaskTargetDate(d.toISOString().split('T')[0]);
+                          setTaskPriority('Low');
+                        } else if (val === 'yearly') {
+                          d.setDate(d.getDate() + 365);
+                          setTaskTargetDate(d.toISOString().split('T')[0]);
+                          setTaskPriority('Low');
+                        }
+                      }}
                       className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none"
                     >
-                      <option value="weekly">This Week</option>
-                      <option value="monthly">This Month</option>
-                      <option value="yearly">This Year</option>
-                      <option value="custom">Specific Target Date</option>
+                      <option value="daily">Within Today (High Urgency)</option>
+                      <option value="weekly">This Week Deadline (Medium Urgency)</option>
+                      <option value="monthly">This Month Deadline (Low Urgency)</option>
+                      <option value="yearly">This Year Deadline (Low Urgency)</option>
+                      <option value="custom">Set Specific Target Deadline Date</option>
                     </select>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Or Choose Specific Target Date</label>
+                  <label className="block text-xs font-bold text-zinc-700 uppercase tracking-wider mb-1">📅 Target Deadline Date (Date of Deadline)</label>
+                  <p className="text-[10px] text-zinc-500 font-medium mb-1.5">Specify when this deliverable must be completed. Date Created/Nominated is recorded automatically today.</p>
                   <input
                     type="date"
                     value={taskTargetDate}
-                    onChange={(e) => setTaskTargetDate(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTaskTargetDate(val);
+                      if (val) {
+                        const now = new Date();
+                        now.setHours(0, 0, 0, 0);
+                        const target = new Date(val);
+                        target.setHours(0, 0, 0, 0);
+                        const diffTime = target.getTime() - now.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays <= 3) setTaskPriority('High');
+                        else if (diffDays <= 7) setTaskPriority('Medium');
+                        else setTaskPriority('Low');
+                      }
+                    }}
                     disabled={taskNominationPeriod !== 'custom'}
                     className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:outline-none disabled:opacity-50"
                   />
@@ -2229,6 +2351,26 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
             </div>
             
             <div className="flex-1 min-h-0 overflow-y-auto p-6 font-sans">
+              {/* Task Details Banner */}
+              <div className="bg-zinc-50 border border-zinc-200 rounded-xl p-4 mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Assignee</span>
+                  <span className="font-extrabold text-zinc-900">{reviewingTask.user?.name}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Nominated By</span>
+                  <span className="font-extrabold text-zinc-900">{reviewingTask.nominatedBy?.name || 'Self-Nominated'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">📅 Date Created</span>
+                  <span className="font-extrabold text-zinc-900">{reviewingTask.entryDate ? new Date(reviewingTask.entryDate).toLocaleDateString('en-US', { dateStyle: 'medium' }) : 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">🎯 Target Deadline</span>
+                  <span className="font-extrabold text-red-650">{reviewingTask.targetDate ? new Date(reviewingTask.targetDate).toLocaleDateString('en-US', { dateStyle: 'medium' }) : 'No Target'}</span>
+                </div>
+              </div>
+
               {reviewingTask.status === 'Awaiting Approval' ? (
                 /* === AWAITING APPROVAL PANEL === */
                 <div className="space-y-5">

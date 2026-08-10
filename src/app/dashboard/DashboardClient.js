@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut, LayoutDashboard, Trophy, Bell, AlertTriangle, Clock, Calendar, Key, CheckCircle2 } from 'lucide-react';
 import AdminPortal from '@/components/AdminPortal';
@@ -17,7 +17,39 @@ export default function DashboardClient({ user }) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [taskTrigger, setTaskTrigger] = useState(null);
-  const [readTaskIds, setReadTaskIds] = useState([]);
+  const [readNotifKeys, setReadNotifKeys] = useState(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem('readNotifKeys_v5');
+        return saved ? JSON.parse(saved) : [];
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const clearNoticeKey = (key, logId = null) => {
+    setReadNotifKeys(prev => {
+      if (prev.includes(key)) return prev;
+      const next = [...prev, key];
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('readNotifKeys_v5', JSON.stringify(next));
+        } catch (e) {}
+      }
+      return next;
+    });
+
+    if (logId) {
+      handleAcknowledgeNotification(logId);
+    }
+  };
+
+  const markTaskAsRead = (taskId) => {
+    if (taskId) clearNoticeKey(`task-read-${taskId}`);
+  };
+
   const [notifications, setNotifications] = useState([]);
 
   // Change Password States
@@ -42,6 +74,8 @@ export default function DashboardClient({ user }) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [isCalendarOpen]);
+
+  const viewOnlyNoticesRef = useRef([]);
 
   useEffect(() => {
     function handleClickOutsideBell(event) {
@@ -95,18 +129,33 @@ export default function DashboardClient({ user }) {
     }
   };
 
+  const [isBellWiggling, setIsBellWiggling] = useState(false);
+  const prevBellCountRef = useRef(0);
+
   const refreshDashboard = async () => {
     await Promise.all([getTasks(), fetchNotifications()]);
   };
 
   useEffect(() => {
-    getTasks();
-    fetchNotifications();
+    refreshDashboard();
     const interval = setInterval(() => {
-      getTasks();
-      fetchNotifications();
-    }, 15000);
-    return () => clearInterval(interval);
+      refreshDashboard();
+    }, 3000);
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshDashboard();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
   }, []);
 
   const parseRemarks = (remarksStr) => {
@@ -124,109 +173,143 @@ export default function DashboardClient({ user }) {
   };
 
   const now = new Date();
-  const threeDaysFromNow = new Date();
-  threeDaysFromNow.setDate(now.getDate() + 3);
 
+  // Construct View-Only Notifications (combines ActivityLog AND task system logs + Delayed tasks)
+  const viewOnlyNotices = [];
+
+  // A. ActivityLog DB notifications (Task-related actions only)
+  const validTaskActions = ['TASK_ACCEPTED', 'TASK_APPROVED', 'PROGRESS_REJECTED', 'TASK_RESTORED', 'REJECTED_DELETED', 'TASK_REJECTED', 'TASK_DELAYED'];
+  notifications.forEach(n => {
+    if (!validTaskActions.includes(n.action)) return;
+    const key = `log-${n.id}`;
+    if (!readNotifKeys.includes(key)) {
+      let details = {};
+      try { details = JSON.parse(n.details); } catch(e){}
+      viewOnlyNotices.push({
+        key,
+        logId: n.id,
+        type: n.action,
+        details,
+        createdAt: n.createdAt
+      });
+    }
+  });
+
+  // B. Task system logs (Handles existing past tasks updated recently)
+  const threeDaysAgoMs = 3 * 24 * 60 * 60 * 1000;
+  tasks.forEach(t => {
+    const updatedAt = t.updatedAt ? new Date(t.updatedAt) : null;
+    const isOwner = Number(t.userId) === Number(user.id);
+    const isNominator = Number(t.nominatedById) === Number(user.id);
+
+    // B1. Subordinate accepted nomination -> notify supervisor (View-Only)
+    if (isNominator && (t.status === 'Ongoing' || t.status === 'Completed')) {
+      const remarks = parseRemarks(t.remarks);
+      const isAcceptedByLog = remarks.some(r => {
+        const isSys = r.role === 'SYSTEM' || r.role === 'System' || r.role === 'SYSTEM_LOG';
+        const text = (r.message || r.content || '').toLowerCase();
+        return isSys && text.includes('nomination accepted');
+      });
+
+      if (isAcceptedByLog) {
+        const key = `task-accepted-${t.id}`;
+        const hasLog = viewOnlyNotices.some(v => v.details?.taskId === t.id && v.type === 'TASK_ACCEPTED');
+        if (!hasLog && !readNotifKeys.includes(key)) {
+          viewOnlyNotices.push({
+            key,
+            taskId: t.id,
+            type: 'TASK_ACCEPTED',
+            details: {
+              taskId: t.id,
+              taskDescription: t.taskDescription,
+              assigneeName: t.user?.name || 'Assigned Staff'
+            },
+            createdAt: t.updatedAt
+          });
+        }
+      }
+    }
+
+    // B2. Supervisor approved progress -> notify subordinate (View-Only)
+    if (isOwner && (t.status === 'Ongoing' || t.status === 'Completed')) {
+      const remarks = parseRemarks(t.remarks);
+      const isApprovedByLog = remarks.some(r => {
+        const isSys = r.role === 'SYSTEM' || r.role === 'System' || r.role === 'SYSTEM_LOG';
+        const text = (r.message || r.content || '').toLowerCase();
+        return isSys && (text.includes('approved progress') || text.includes('marked task as completed'));
+      });
+
+      if (isApprovedByLog) {
+        const key = `task-approved-${t.id}`;
+        const hasLog = viewOnlyNotices.some(v => v.details?.taskId === t.id && v.type === 'TASK_APPROVED');
+        if (!hasLog && !readNotifKeys.includes(key)) {
+          viewOnlyNotices.push({
+            key,
+            taskId: t.id,
+            type: 'TASK_APPROVED',
+            details: {
+              taskId: t.id,
+              taskDescription: t.taskDescription,
+              supervisorName: 'Supervisor'
+            },
+            createdAt: t.updatedAt
+          });
+        }
+      }
+    }
+
+    // B3. Delayed Task -> View-Only 1-Time Notification for Assignee or Nominator
+    if (t.status === 'Delayed' && (isOwner || isNominator)) {
+      const key = `task-delayed-${t.id}`;
+      const hasLog = viewOnlyNotices.some(v => v.details?.taskId === t.id && v.type === 'TASK_DELAYED');
+      if (!hasLog && !readNotifKeys.includes(key)) {
+        viewOnlyNotices.push({
+          key,
+          taskId: t.id,
+          type: 'TASK_DELAYED',
+          details: {
+            taskId: t.id,
+            taskDescription: t.taskDescription,
+            targetDate: t.targetDate
+          },
+          createdAt: t.updatedAt || t.targetDate
+        });
+      }
+    }
+  });
+
+  viewOnlyNoticesRef.current = viewOnlyNotices;
+
+  // 2. Action-Required Urgent Tasks (MUST STAY UNTIL ACTION IS EXECUTED BY USER)
   const urgentTasks = tasks.filter(t => {
-    if (readTaskIds.some(item => item.id === t.id && item.updatedAt === t.updatedAt)) return false;
-
-    // 1. Pending Acceptance assigned to the logged-in user
+    // 1. Pending Acceptance assigned to user (Requires Accept/Reject action)
     if (t.status === 'Pending Acceptance' && Number(t.userId) === Number(user.id)) return true;
 
-    // 1b. Progress update rejection notification for subordinate
-    if (t.rejectionReason && t.status === 'Ongoing' && Number(t.userId) === Number(user.id)) return true;
-
-    // 2. Rejected tasks notifications (properly routed to the correct party)
-    if (t.status === 'Rejected') {
-      const isNominationRej = checkIsNominationRejection(t);
-      if (isNominationRej) {
-        // Subordinate rejected supervisor's nomination -> notify supervisor
-        if (Number(t.nominatedById) === Number(user.id)) return true;
-      } else {
-        // Supervisor rejected subordinate's request -> notify subordinate
-        if (Number(t.userId) === Number(user.id)) return true;
-      }
-    }
-
-    // 3. Delayed tasks assigned to the logged-in user or nominated by them
-    if (t.status === 'Delayed' && (Number(t.userId) === Number(user.id) || Number(t.nominatedById) === Number(user.id))) return true;
-
-    // 4. Recently updated transitions (Ongoing/Completed) within 3 hours
-    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
-    const updatedAt = t.updatedAt ? new Date(t.updatedAt) : null;
-    if (updatedAt && updatedAt >= threeHoursAgo) {
-      if (t.status === 'Ongoing' || t.status === 'Completed') {
-        const remarks = parseRemarks(t.remarks);
-        
-        const checkLogText = (r, keyword) => {
-          if (!r) return false;
-          const isSys = r.role === 'SYSTEM' || r.role === 'System' || r.role === 'SYSTEM_LOG';
-          if (!isSys) return false;
-          const text = r.message || r.content || '';
-          return text.toLowerCase().includes(keyword.toLowerCase());
-        };
-
-        const isApprovedByLog = remarks.some(r => 
-          checkLogText(r, 'approved progress') || 
-          checkLogText(r, 'marked task as completed')
-        );
-        
-        const isAcceptedByLog = remarks.some(r => 
-          checkLogText(r, 'nomination accepted')
-        );
-        
-        const isForcePushedByLog = t.status === 'Ongoing' && t.assignedNote && !isAcceptedByLog;
-
-        if (isApprovedByLog && Number(t.userId) === Number(user.id)) {
-          return true;
-        }
-        if (isAcceptedByLog && Number(t.nominatedById) === Number(user.id)) {
-          return true;
-        }
-        if (isForcePushedByLog && Number(t.userId) === Number(user.id)) {
-          return true;
-        }
-      }
-    }
-
-    // 5. Soon due tasks assigned to the logged-in user
-    if (t.targetDate && Number(t.userId) === Number(user.id)) {
-      const blockedStatuses = ['Rejected', 'Awaiting Approval', 'Awaiting Deletion', 'Pending Acceptance'];
-      if (blockedStatuses.includes(t.status)) return false;
-      const target = new Date(t.targetDate);
-      return target <= threeDaysFromNow;
-    }
-
-    // 6. Awaiting Approval — notify supervisor only (not the task owner)
+    // 2. Awaiting Approval — notify supervisor only (Requires Approve/Reject action)
     if (t.status === 'Awaiting Approval' && Number(t.userId) !== Number(user.id)) {
       if (user.role === 'PROGRAM_HEAD' && t.user?.departmentId === user.departmentId) return true;
       if (user.role === 'SCHOOL_ADMIN' || user.role === 'PRINCIPAL') return true;
     }
 
-    // 7. Awaiting Deletion — notify supervisor only
+    // 3. Awaiting Deletion — notify supervisor only (Requires Approve Deletion / Keep Task action)
     if (t.status === 'Awaiting Deletion' && Number(t.userId) !== Number(user.id)) {
       if (user.role === 'PROGRAM_HEAD' && t.user?.departmentId === user.departmentId) return true;
       if (user.role === 'SCHOOL_ADMIN' || user.role === 'PRINCIPAL') return true;
     }
 
-    // 8. New unread chat message from the other party
-    if (t.remarks) {
-      try {
-        const parsed = JSON.parse(t.remarks);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const latestMsg = parsed[parsed.length - 1];
-          // Message from the other party (sender != user.name, role != SYSTEM)
-          if (latestMsg.role !== 'SYSTEM' && latestMsg.role !== 'System' && latestMsg.role !== 'SYSTEM_LOG') {
-            if (latestMsg.sender !== user.name) {
-              return true;
-            }
-          }
-        }
-      } catch (e) {}
-    }
-
     return false;
   });
+
+  const totalBellCount = viewOnlyNotices.length + urgentTasks.length;
+
+  useEffect(() => {
+    if (totalBellCount > prevBellCountRef.current && prevBellCountRef.current !== 0) {
+      setIsBellWiggling(true);
+      const timer = setTimeout(() => setIsBellWiggling(false), 3000);
+      return () => clearTimeout(timer);
+    }
+    prevBellCountRef.current = totalBellCount;
+  }, [totalBellCount]);
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -263,12 +346,13 @@ export default function DashboardClient({ user }) {
         setPasswordSuccess('Password successfully updated!');
         setNewPassword('');
         setConfirmPassword('');
+        setTimeout(() => setShowPasswordModal(false), 1500);
       } else {
         const data = await res.json();
         setPasswordError(data.error || 'Failed to update password.');
       }
     } catch (err) {
-      setPasswordError('Connection error. Please try again.');
+      setPasswordError('Connection error. Try again.');
     } finally {
       setPasswordSubmitting(false);
     }
@@ -285,9 +369,9 @@ export default function DashboardClient({ user }) {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 font-sans flex flex-col relative">
-      {/* Header */}
-      <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/95 backdrop-blur-md shadow-sm">
+    <div className="min-h-screen bg-zinc-50 font-sans antialiased text-zinc-900 pb-12">
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur-md">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             <div className="flex items-center gap-3">
@@ -310,137 +394,101 @@ export default function DashboardClient({ user }) {
                 {/* Notification Dropdown Trigger */}
                 <div className="relative" id="bell-notification-dropdown-container">
                    <button
-                    onClick={() => setShowNotifications(!showNotifications)}
-                    className="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all active:scale-95 border border-zinc-200 bg-white relative"
+                    onClick={() => {
+                      setShowNotifications(!showNotifications);
+                      setIsBellWiggling(false);
+                    }}
+                    className={`rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 transition-all active:scale-95 border relative ${
+                      isBellWiggling
+                        ? 'bg-red-50 text-red-600 border-red-400 ring-2 ring-red-400 animate-bounce shadow-md'
+                        : 'bg-white border-zinc-200'
+                    }`}
                     title="Notifications"
                   >
-                    <Bell className="h-4 w-4" />
-                    {urgentTasks.length + notifications.length > 0 && (
+                     <Bell className={`h-4 w-4 ${isBellWiggling ? 'text-red-600 animate-pulse' : ''}`} />
+                    {totalBellCount > 0 && (
                       <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] font-bold text-white ring-2 ring-white animate-pulse">
-                        {urgentTasks.length + notifications.length}
+                        {totalBellCount}
                       </span>
                     )}
                   </button>
 
                   {showNotifications && (
                     <div className="absolute right-0 mt-2 w-80 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl z-50 text-zinc-900">
-                      <div className="border-b border-zinc-100 pb-2 mb-3 flex items-center justify-between">
+                      <div className="border-b border-zinc-100 pb-2 mb-3 flex items-center justify-between gap-2">
                         <span className="font-extrabold text-sm text-zinc-800">Deadlines &amp; Alerts</span>
-                        <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
-                          {urgentTasks.length + notifications.length} urgent
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {viewOnlyNotices.length > 0 && (
+                            <button
+                              onClick={() => {
+                                viewOnlyNotices.forEach(v => clearNoticeKey(v.key, v.logId));
+                              }}
+                              className="text-[9px] font-black bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 text-zinc-700 px-2 py-0.5 rounded-md transition"
+                              title="Clear all view-only notification cards"
+                            >
+                              Clear Notices
+                            </button>
+                          )}
+                          <span className="text-[10px] font-bold bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
+                            {totalBellCount}
+                          </span>
+                        </div>
                       </div>
                       <div className="space-y-3 max-h-64 overflow-y-auto">
-                        {/* 1. Notifications (Scenario B Direct Deletions) */}
-                        {notifications.map(n => {
-                          let details = {};
-                          try { details = JSON.parse(n.details); } catch(e){}
+                        {/* 1. View-Only Notifications */}
+                        {viewOnlyNotices.map(v => {
+                          const isAccepted = v.type === 'TASK_ACCEPTED';
+                          const isApproved = v.type === 'TASK_APPROVED';
+                          const isRejectedNotif = v.type === 'TASK_REJECTED' || v.type === 'PROGRESS_REJECTED' || v.type === 'REJECTED_DELETED';
+                          const isRestored = v.type === 'TASK_RESTORED';
+                          const isDelayedNotif = v.type === 'TASK_DELAYED';
 
-                          if (n.action === 'TASK_ACCEPTED') {
-                            return (
-                              <div
-                                key={`notif-${n.id}`}
-                                className="p-2.5 rounded-lg border border-green-200 bg-green-50/50 text-left relative"
-                              >
-                                <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1 text-green-800">
-                                  <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-green-600" /> Deliverable Accepted</span>
-                                  <button 
-                                    onClick={async (e) => { 
-                                      e.stopPropagation(); 
-                                      await handleAcknowledgeNotification(n.id); 
-                                    }}
-                                    className="text-[9px] bg-green-100 hover:bg-green-200 border border-green-300 text-green-800 px-1.5 py-0.5 rounded font-black transition"
-                                  >
-                                    ✕ Clear
-                                  </button>
-                                </div>
-                                <p className="text-[10px] text-zinc-700 font-extrabold leading-tight">
-                                  {details.assigneeName} accepted nominated deliverable <span className="text-zinc-950 font-black">"{details.taskDescription}"</span>.
-                                </p>
-                              </div>
-                            );
-                          }
-
-                          if (n.action === 'TASK_REJECTED') {
-                            return (
-                              <div
-                                key={`notif-${n.id}`}
-                                className="p-2.5 rounded-lg border border-red-200 bg-red-50/50 text-left relative"
-                              >
-                                <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1 text-red-800">
-                                  <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3 text-red-600" /> Deliverable Rejected</span>
-                                  <button 
-                                    onClick={async (e) => { 
-                                      e.stopPropagation(); 
-                                      await handleAcknowledgeNotification(n.id); 
-                                    }}
-                                    className="text-[9px] bg-red-100 hover:bg-red-200 border border-red-300 text-red-800 px-1.5 py-0.5 rounded font-black transition"
-                                  >
-                                    ✕ Clear
-                                  </button>
-                                </div>
-                                <p className="text-[10px] text-zinc-700 font-extrabold leading-tight">
-                                  {details.assigneeName} rejected deliverable <span className="text-zinc-950 font-black">"{details.taskDescription}"</span>. {details.rejectionReason ? `Reason: "${details.rejectionReason}"` : ''}
-                                </p>
-                              </div>
-                            );
-                          }
-
-                          if (n.action === 'TASK_RESTORED') {
-                            return (
-                              <div
-                                key={`notif-${n.id}`}
-                                className="p-2.5 rounded-lg border border-blue-200 bg-blue-50/50 text-left relative"
-                              >
-                                <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1 text-blue-800">
-                                  <span className="flex items-center gap-1.5"><CheckCircle2 className="h-3 w-3 text-blue-600" /> Task Restored</span>
-                                  <button 
-                                    onClick={async (e) => { 
-                                      e.stopPropagation(); 
-                                      await handleAcknowledgeNotification(n.id); 
-                                    }}
-                                    className="text-[9px] bg-blue-100 hover:bg-blue-200 border border-blue-300 text-blue-800 px-1.5 py-0.5 rounded font-black transition"
-                                  >
-                                    ✕ Clear
-                                  </button>
-                                </div>
-                                <p className="text-[10px] text-zinc-700 font-extrabold leading-tight">
-                                  Your archived task <span className="text-zinc-950 font-black">"{details.taskDescription}"</span> was restored by {details.supervisorName}. It is now active (Ongoing).
-                                </p>
-                              </div>
-                            );
-                          }
+                          const titleText = isAccepted ? 'Deliverable Accepted ✓' : isApproved ? 'Progress Approved ✓' : isRestored ? 'Task Restored ✓' : isDelayedNotif ? 'Task Delayed ⚠️' : 'Deliverable Rejected';
+                          const badgeStyle = isAccepted || isApproved ? 'text-green-700' : isRestored ? 'text-blue-700' : 'text-red-700';
+                          const cardBorder = isAccepted || isApproved ? 'bg-green-50/50 border-green-200' : isRestored ? 'bg-blue-50/50 border-blue-200' : 'bg-red-50/50 border-red-200';
+                          const iconComp = isAccepted || isApproved ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : isRestored ? <CheckCircle2 className="h-3 w-3 text-blue-600" /> : <AlertTriangle className="h-3 w-3 text-red-600" />;
 
                           return (
-                            <div
-                              key={`notif-${n.id}`}
-                              className="p-2.5 rounded-lg border border-red-200 bg-red-50/30 text-left relative"
-                            >
-                              <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1 text-red-750">
-                                <span className="flex items-center gap-1.5"><AlertTriangle className="h-3 w-3" /> Nomination Rejected</span>
-                                <button 
-                                  onClick={async (e) => { 
-                                    e.stopPropagation(); 
-                                    await handleAcknowledgeNotification(n.id); 
+                            <div key={`viewnotif-${v.key}`} className={`p-2.5 rounded-lg border text-left relative ${cardBorder}`}>
+                              <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1">
+                                <span className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider">
+                                  {iconComp}
+                                  <span className={badgeStyle}>{titleText}</span>
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    clearNoticeKey(v.key, v.logId);
                                   }}
-                                  className="text-[9px] bg-red-100 hover:bg-red-200 border border-red-300 text-red-700 px-1.5 py-0.5 rounded font-black transition"
+                                  className="text-[9px] bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 text-zinc-700 px-1.5 py-0.5 rounded font-black transition"
+                                  title="Clear this notice"
                                 >
                                   ✕ Clear
                                 </button>
                               </div>
                               <p className="text-[10px] text-zinc-700 font-extrabold leading-tight">
-                                Self-nominated task <span className="text-zinc-950 font-black">"{details.taskDescription}"</span> was rejected and deleted by {details.supervisorName}.
+                                {isAccepted && (
+                                  <>{v.details?.assigneeName || 'Staff'} accepted nominated deliverable <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>.</>
+                                )}
+                                {isApproved && (
+                                  <>Supervisor {v.details?.supervisorName || 'Supervisor'} approved progress update for <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>.</>
+                                )}
+                                {isRestored && (
+                                  <>Your archived task <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span> was restored. It is now active (Ongoing).</>
+                                )}
+                                {isDelayedNotif && (
+                                  <>Task <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span> has passed its target deadline and is now marked as Delayed.</>
+                                )}
+                                {isRejectedNotif && (
+                                  <>{v.details?.assigneeName || 'User'} rejected deliverable <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>. {v.details?.rejectionReason || v.details?.remarks ? `Reason: "${v.details.rejectionReason || v.details.remarks}"` : ''}</>
+                                )}
                               </p>
-                              {details.remarks && (
-                                <p className="text-[9px] text-red-750 font-bold bg-red-50 p-1.5 rounded border border-red-200 mt-1 italic">
-                                  Remarks: "{details.remarks}"
-                                </p>
-                              )}
                             </div>
                           );
                         })}
 
-                        {urgentTasks.length === 0 && notifications.length === 0 ? (
+                        {/* 2. Action-Required Urgent Tasks */}
+                        {viewOnlyNotices.length === 0 && urgentTasks.length === 0 ? (
                           <p className="text-xs text-zinc-500 text-center py-4">No urgent deadlines or delayed tasks.</p>
                         ) : (
                           urgentTasks.map(t => {
@@ -529,18 +577,29 @@ export default function DashboardClient({ user }) {
                                 onClick={() => {
                                   setShowNotifications(false);
                                   setTaskTrigger(t);
-                                  setReadTaskIds(prev => {
-                                    const filtered = prev.filter(item => item.id !== t.id);
-                                    return [...filtered, { id: t.id, updatedAt: t.updatedAt }];
-                                  });
+                                  markTaskAsRead(t.id, t.updatedAt);
                                 }}
                                 className={`p-2.5 rounded-lg border text-left cursor-pointer hover:bg-zinc-50 hover:border-zinc-300 transition active:scale-[0.99] ${badgeColor}`}
                               >
-                                <div className="flex items-center gap-1.5 font-bold text-[11px] uppercase tracking-wider mb-1">
-                                  {icon}
-                                  <span className={isApproved || isAccepted ? 'text-green-700' : isForcePushed ? 'text-blue-700' : isDelayed || isRejected ? 'text-red-700' : isPendingAcceptance ? 'text-blue-700' : isAwaitingApproval ? (t.progress === 0 || t.previousProgress === null ? 'text-blue-700' : 'text-purple-700') : isAwaitingDeletion ? 'text-orange-700' : 'text-amber-700'}>
-                                    {label}
+                                <div className="flex items-center justify-between font-bold text-[11px] uppercase tracking-wider mb-1">
+                                  <span className="flex items-center gap-1.5">
+                                    {icon}
+                                    <span className={isApproved || isAccepted ? 'text-green-700' : isForcePushed ? 'text-blue-700' : isDelayed || isRejected ? 'text-red-700' : isPendingAcceptance ? 'text-blue-700' : isAwaitingApproval ? (t.progress === 0 || t.previousProgress === null ? 'text-blue-700' : 'text-purple-700') : isAwaitingDeletion ? 'text-orange-700' : 'text-amber-700'}>
+                                      {label}
+                                    </span>
                                   </span>
+                                  {(isAccepted || isApproved || isCompleted || isForcePushed) && (
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        markTaskAsRead(t.id, t.updatedAt);
+                                      }}
+                                      className="text-[9px] bg-zinc-100 hover:bg-zinc-200 border border-zinc-300 text-zinc-700 px-1.5 py-0.5 rounded font-black transition"
+                                      title="Clear this notice"
+                                    >
+                                      ✕ Clear
+                                    </button>
+                                  )}
                                 </div>
                                 <p className="text-xs font-bold text-zinc-800 line-clamp-1">{t.category}</p>
                                 <p className="text-[11px] text-zinc-600 line-clamp-2 mt-0.5">{t.taskDescription}</p>
@@ -639,7 +698,7 @@ export default function DashboardClient({ user }) {
 
       {/* Main Content */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 relative">
-        {activeTab === 'leaderboard' && user.role !== 'FACULTY_STAFF' ? (
+        {activeTab === 'leaderboard' && (user.role !== 'FACULTY_STAFF' && user.role !== 'FACULTY' && user.role !== 'STAFF') ? (
           <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-6">
             <Leaderboard user={user} />
           </div>
@@ -647,7 +706,7 @@ export default function DashboardClient({ user }) {
           <>
             {(user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'SCHOOL_ADMIN') && <AdminPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
             {user.role === 'PROGRAM_HEAD' && <ProgramHeadPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
-            {user.role === 'FACULTY_STAFF' && <FacultyPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
+            {(user.role === 'FACULTY_STAFF' || user.role === 'FACULTY' || user.role === 'STAFF') && <FacultyPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
           </>
         )}
       </main>

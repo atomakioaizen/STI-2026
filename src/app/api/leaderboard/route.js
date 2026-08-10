@@ -21,7 +21,8 @@ import { getSessionUser } from '@/lib/auth';
  *       Principal, Program Head, and School Admin are excluded.
  */
 function computeScore(task) {
-  const priorityPts = task.priority === 'High' ? 30 : task.priority === 'Medium' ? 20 : 10;
+  const prio = (task.priority || '').toUpperCase();
+  const priorityPts = prio === 'HIGH' ? 30 : prio === 'MEDIUM' ? 20 : 10;
 
   let timeFactor = 1.2; // default: no deadline
   let timeliness = 'no_deadline';

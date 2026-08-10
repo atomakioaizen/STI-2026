@@ -24,8 +24,11 @@ export async function PATCH(request, { params }) {
 
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
+      'ADMIN': 4,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
+      'FACULTY': 1,
+      'STAFF': 1,
       'FACULTY_STAFF': 1
     };
 
@@ -48,9 +51,15 @@ export async function PATCH(request, { params }) {
     if (position !== undefined) data.position = position ? position.trim() : "";
     if (password) data.password = await hashPassword(password);
 
+    // Normalize role if FACULTY or STAFF passed
+    let normalizedRole = role;
+    if (role === 'FACULTY' || role === 'STAFF') {
+      normalizedRole = 'FACULTY_STAFF';
+    }
+
     // Username update check: Only School Admin and Principal can edit usernames, and only for accounts below their role
     if (username && username.trim().toLowerCase() !== targetUser.username) {
-      const canEditUsername = (currentUser.role === 'SCHOOL_ADMIN' || currentUser.role === 'PRINCIPAL') && (currentUserLevel > targetUserLevel);
+      const canEditUsername = (currentUser.role === 'SCHOOL_ADMIN' || currentUser.role === 'ADMIN' || currentUser.role === 'PRINCIPAL') && (currentUserLevel > targetUserLevel);
       if (!canEditUsername) {
         return NextResponse.json({ error: "Forbidden — Only School Admin and Principal can edit usernames of lower accounts" }, { status: 403 });
       }
@@ -58,12 +67,12 @@ export async function PATCH(request, { params }) {
     }
 
     // Role and department update check: Only levels > 2 (Admin/Principal) can modify role/department, and only to levels below their own
-    if (role && role !== targetUser.role) {
-      const newRoleLevel = ROLE_LEVELS[role] || 0;
+    if (normalizedRole && normalizedRole !== targetUser.role) {
+      const newRoleLevel = ROLE_LEVELS[normalizedRole] || 0;
       if (currentUserLevel <= 2 || currentUserLevel <= newRoleLevel) {
         return NextResponse.json({ error: "Forbidden — You do not have permission to assign this role" }, { status: 403 });
       }
-      data.role = role;
+      data.role = normalizedRole;
     }
 
     if (departmentId !== undefined && parseInt(departmentId, 10) !== targetUser.departmentId) {
@@ -88,7 +97,7 @@ export async function PATCH(request, { params }) {
 
     // Auto-assign Program Head rule:
     // If setting role = PROGRAM_HEAD for a department, ensure any previous PROGRAM_HEAD in that department becomes FACULTY_STAFF
-    if ((currentUser.role === "SCHOOL_ADMIN" || currentUser.role === "PRINCIPAL") && data.role === "PROGRAM_HEAD" && (data.departmentId || targetUser.departmentId)) {
+    if ((currentUser.role === "SCHOOL_ADMIN" || currentUser.role === "ADMIN" || currentUser.role === "PRINCIPAL") && data.role === "PROGRAM_HEAD" && (data.departmentId || targetUser.departmentId)) {
       await prisma.user.updateMany({
         where: {
           role: "PROGRAM_HEAD",
@@ -116,6 +125,10 @@ export async function PATCH(request, { params }) {
   }
 }
 
+export async function PUT(request, context) {
+  return PATCH(request, context);
+}
+
 export async function DELETE(request, { params }) {
   try {
     const currentUser = await getSessionUser();
@@ -136,8 +149,11 @@ export async function DELETE(request, { params }) {
 
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
+      'ADMIN': 4,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
+      'FACULTY': 1,
+      'STAFF': 1,
       'FACULTY_STAFF': 1
     };
 
@@ -158,6 +174,11 @@ export async function DELETE(request, { params }) {
 
     // Delete user tasks first
     await prisma.task.deleteMany({ where: { userId } });
+    // Nullify nominatedById on tasks nominated by this user
+    await prisma.task.updateMany({ where: { nominatedById: userId }, data: { nominatedById: null } });
+    // Delete activity logs for this user
+    await prisma.activityLog.deleteMany({ where: { userId } });
+    // Delete the user record
     await prisma.user.delete({ where: { id: userId } });
 
     return NextResponse.json({ success: true });

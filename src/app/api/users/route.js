@@ -5,7 +5,7 @@ import { getSessionUser, hashPassword } from '@/lib/auth';
 export async function GET(request) {
   try {
     const user = await getSessionUser();
-    if (!user || user.role === 'FACULTY_STAFF') {
+    if (!user || user.role === 'FACULTY_STAFF' || user.role === 'FACULTY' || user.role === 'STAFF') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -17,7 +17,7 @@ export async function GET(request) {
     // Role-based visibility for Assignee lists & user management
     if (user.role === 'PROGRAM_HEAD') {
       where.OR = [
-        { departmentId: user.departmentId, role: 'FACULTY_STAFF' },
+        { departmentId: user.departmentId, role: { in: ['FACULTY_STAFF', 'FACULTY', 'STAFF'] } },
         { id: user.userId }
       ];
     } else if (user.role === 'PRINCIPAL') {
@@ -95,12 +95,18 @@ export async function POST(request) {
 
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
+      'ADMIN': 4,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
       'FACULTY': 1,
       'STAFF': 1,
       'FACULTY_STAFF': 1
     };
+
+    let normalizedRole = role;
+    if (role === 'FACULTY' || role === 'STAFF') {
+      normalizedRole = 'FACULTY_STAFF';
+    }
 
     const currentUserLevel = ROLE_LEVELS[currentUser.role] || 0;
     const targetUserLevel = ROLE_LEVELS[role] || 0;
@@ -132,7 +138,7 @@ export async function POST(request) {
 
     // Auto-assign Program Head rule on creation:
     // If this new user is created as a PROGRAM_HEAD, auto-demote the previous one in the same department
-    if (role === 'PROGRAM_HEAD') {
+    if (normalizedRole === 'PROGRAM_HEAD') {
       await prisma.user.updateMany({
         where: {
           role: 'PROGRAM_HEAD',
@@ -148,7 +154,7 @@ export async function POST(request) {
         username: cleanUsername,
         password: hashedPassword,
         position: position ? position.trim() : 'Faculty',
-        role: role,
+        role: normalizedRole,
         departmentId: targetDeptId
       },
       select: {

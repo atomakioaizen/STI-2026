@@ -64,28 +64,32 @@ export async function GET(request) {
 
     const where = {};
 
+    const currentUserId = Number(user.userId || user.id);
+
     // 1. Role-based baseline visibility limits
-    if (user.role === 'FACULTY_STAFF') {
-      // Faculty/Staff can only see their own tasks
-      where.userId = user.userId;
+    if (user.role === 'FACULTY_STAFF' || user.role === 'FACULTY' || user.role === 'STAFF') {
+      // Faculty/Staff can see their own assigned tasks or tasks they nominated
+      where.OR = [
+        { userId: currentUserId },
+        { nominatedById: currentUserId }
+      ];
     } else if (user.role === 'PROGRAM_HEAD') {
-      // Program Heads see tasks belonging to FACULTY_STAFF in their department, OR their own tasks (their nominated tasks)
+      // Program Heads see tasks belonging to FACULTY_STAFF in their department, OR their assigned/nominated tasks
       where.OR = [
         {
           user: {
             departmentId: user.departmentId,
-            role: 'FACULTY_STAFF'
+            role: { in: ['FACULTY_STAFF', 'FACULTY', 'STAFF'] }
           }
         },
-        {
-          userId: user.userId
-        }
+        { userId: currentUserId },
+        { nominatedById: currentUserId }
       ];
     } else if (user.role === 'PRINCIPAL') {
-      // Principal can see all academic departments (non-Admin) OR her own tasks
-      const currentUserId = user.userId || user.id;
+      // Principal can see all academic departments (non-Admin) OR her own assigned/nominated tasks
       where.OR = [
         { userId: currentUserId },
+        { nominatedById: currentUserId },
         {
           user: {
             department: {
@@ -193,7 +197,9 @@ export async function GET(request) {
       // Do not filter by archived
     } else {
       where.archived = false;
-      where.status = { not: 'Completed' };
+      if (!status || status === 'All') {
+        where.status = { not: 'Completed' };
+      }
     }
 
     // 5. Apply timeframe date filters
@@ -259,14 +265,24 @@ export async function GET(request) {
 
     await populateNominators(tasks);
 
-    // Auto-flag overdue tasks as Delayed
+    // Auto-flag overdue tasks as Delayed (only after target date has passed midnight)
     const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     const overdueIds = tasks
-      .filter(t =>
-        t.targetDate &&
-        new Date(t.targetDate) < now &&
-        (t.status === 'Ongoing' || t.status === 'Not Started')
-      )
+      .filter(t => {
+        if (!t.targetDate) return false;
+        if (t.status !== 'Ongoing' && t.status !== 'Not Started') return false;
+        const targetObj = new Date(t.targetDate);
+        if (isNaN(targetObj.getTime())) return false;
+        
+        // Extract YYYY-MM-DD of target date
+        const targetStr = typeof t.targetDate === 'string'
+          ? t.targetDate.split('T')[0]
+          : `${targetObj.getFullYear()}-${String(targetObj.getMonth() + 1).padStart(2, '0')}-${String(targetObj.getDate()).padStart(2, '0')}`;
+
+        return todayStr > targetStr;
+      })
       .map(t => t.id);
 
     if (overdueIds.length > 0) {
@@ -277,6 +293,29 @@ export async function GET(request) {
       // Reflect the change in the response
       tasks.forEach(t => {
         if (overdueIds.includes(t.id)) t.status = 'Delayed';
+      });
+    }
+
+    // Self-heal any mistakenly delayed tasks whose target date is today or in the future
+    const falseDelayedIds = tasks
+      .filter(t => {
+        if (!t.targetDate || t.status !== 'Delayed') return false;
+        const targetObj = new Date(t.targetDate);
+        if (isNaN(targetObj.getTime())) return false;
+        const targetStr = typeof t.targetDate === 'string'
+          ? t.targetDate.split('T')[0]
+          : `${targetObj.getFullYear()}-${String(targetObj.getMonth() + 1).padStart(2, '0')}-${String(targetObj.getDate()).padStart(2, '0')}`;
+        return todayStr <= targetStr;
+      })
+      .map(t => t.id);
+
+    if (falseDelayedIds.length > 0) {
+      await prisma.task.updateMany({
+        where: { id: { in: falseDelayedIds } },
+        data: { status: 'Ongoing' }
+      });
+      tasks.forEach(t => {
+        if (falseDelayedIds.includes(t.id)) t.status = 'Ongoing';
       });
     }
 

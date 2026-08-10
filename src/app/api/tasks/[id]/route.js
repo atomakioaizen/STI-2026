@@ -287,6 +287,19 @@ export async function PATCH(request, { params }) {
               data.previousProgress = null;
               data.rejectionReason = reason.trim();
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor rejected progress update request. Remarks: "${reason.trim()}"`);
+
+              await prisma.activityLog.create({
+                data: {
+                  userId: task.userId,
+                  action: 'PROGRESS_REJECTED',
+                  details: JSON.stringify({
+                    taskId: task.id,
+                    taskDescription: task.taskDescription,
+                    supervisorName: user.name,
+                    rejectionReason: reason.trim()
+                  })
+                }
+              });
             }
           } else if (task.status === 'Awaiting Deletion') {
             data.status = 'Ongoing';
@@ -301,6 +314,19 @@ export async function PATCH(request, { params }) {
             data.previousProgress = null;
             if (task.status === 'Awaiting Approval') {
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor ${user.name} approved progress completion request.`);
+              await prisma.activityLog.create({
+                data: {
+                  userId: task.userId,
+                  action: 'TASK_APPROVED',
+                  details: JSON.stringify({
+                    taskId: task.id,
+                    taskDescription: task.taskDescription,
+                    supervisorName: user.name,
+                    newStatus: 'Completed',
+                    progress: 100
+                  })
+                }
+              });
             } else {
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor ${user.name} marked task as Completed.`);
             }
@@ -308,6 +334,19 @@ export async function PATCH(request, { params }) {
             data.rejectionReason = null;
             if (task.status === 'Awaiting Approval') {
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor ${user.name} approved progress update to ${task.progress}%.`);
+              await prisma.activityLog.create({
+                data: {
+                  userId: task.userId,
+                  action: 'TASK_APPROVED',
+                  details: JSON.stringify({
+                    taskId: task.id,
+                    taskDescription: task.taskDescription,
+                    supervisorName: user.name,
+                    newStatus: 'Ongoing',
+                    progress: task.progress
+                  })
+                }
+              });
             } else if (task.status === 'Awaiting Deletion') {
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor ${user.name} rejected deletion request. Task returned to Ongoing.`);
             }

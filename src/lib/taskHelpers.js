@@ -66,3 +66,53 @@ export function getTaskActorInfo(task) {
     coAssignees
   };
 }
+
+export function getPendingElapsedInfo(task) {
+  if (!task) return null;
+  const status = task.status;
+  const isPendingAcceptance = status === 'Pending Acceptance';
+  const isAwaitingApproval = status === 'Awaiting Approval';
+  const isAwaitingDeletion = status === 'Awaiting Deletion';
+
+  if (!isPendingAcceptance && !isAwaitingApproval && !isAwaitingDeletion) {
+    return null;
+  }
+
+  const dateToUse = task.updatedAt || task.createdAt || task.entryDate;
+  if (!dateToUse) return null;
+
+  const taskDate = new Date(dateToUse);
+  const now = new Date();
+  const diffMs = Math.max(0, now - taskDate);
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+  let text = '';
+  if (diffDays === 0) {
+    if (diffHours < 1) {
+      text = isPendingAcceptance ? 'Pending < 1 hr (Acceptance)' : 'Pending < 1 hr (Approval)';
+    } else {
+      text = isPendingAcceptance 
+        ? `Pending ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} (Acceptance)` 
+        : `Pending ${diffHours} ${diffHours === 1 ? 'hr' : 'hrs'} (Approval)`;
+    }
+  } else {
+    text = isPendingAcceptance 
+      ? `${diffDays} ${diffDays === 1 ? 'day' : 'days'} unaccepted` 
+      : `${diffDays} ${diffDays === 1 ? 'day' : 'days'} unapproved`;
+  }
+
+  const isUrgent = diffDays >= 3;
+  const badgeClass = isUrgent 
+    ? 'bg-red-100 text-red-900 border-red-300 font-extrabold animate-pulse'
+    : 'bg-amber-100 text-amber-900 border-amber-300 font-bold';
+
+  return {
+    days: diffDays,
+    hours: diffHours,
+    text,
+    isUrgent,
+    badgeClass,
+    statusType: isPendingAcceptance ? 'acceptance' : 'approval'
+  };
+}
