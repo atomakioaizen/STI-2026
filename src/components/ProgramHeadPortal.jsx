@@ -1180,15 +1180,40 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
               {/* List */}
               {(() => {
                 const filteredFacultyTasks = facultyTasks.filter(t => {
+                  if (t.archived) return false;
                   if (selectedFacultyId !== 'All' && Number(t.userId) !== Number(selectedFacultyId)) return false;
+
                   if (!searchQuery.trim()) return true;
+
                   const q = searchQuery.toLowerCase().trim();
+
+                  const ownerName = (t.user?.name || '').toLowerCase();
+                  const ownerPosition = (t.user?.position || '').toLowerCase();
+                  const nominatorName = (t.nominatedBy?.name || '').toLowerCase();
+                  const taskCategory = (t.category || '').toLowerCase();
+                  const taskDesc = (t.taskDescription || '').toLowerCase();
+                  const statusStr = (t.status || '').toLowerCase();
+                  const priorityStr = (t.priority || '').toLowerCase();
+                  const progressStr = `${t.progress}%`;
+
+                  const createdDateStr = t.entryDate ? new Date(t.entryDate).toLocaleDateString('en-US', { dateStyle: 'short' }).toLowerCase() : '';
+                  const createdDateFull = t.entryDate ? new Date(t.entryDate).toLocaleDateString('en-US', { dateStyle: 'medium' }).toLowerCase() : '';
+                  const targetDateStr = t.targetDate ? new Date(t.targetDate).toLocaleDateString('en-US', { dateStyle: 'short' }).toLowerCase() : '';
+                  const targetDateFull = t.targetDate ? new Date(t.targetDate).toLocaleDateString('en-US', { dateStyle: 'medium' }).toLowerCase() : '';
+
                   return (
-                    t.taskDescription?.toLowerCase().includes(q) ||
-                    t.category?.toLowerCase().includes(q) ||
-                    t.user?.name?.toLowerCase().includes(q) ||
-                    t.status?.toLowerCase().includes(q) ||
-                    t.priority?.toLowerCase().includes(q)
+                    ownerName.includes(q) ||
+                    ownerPosition.includes(q) ||
+                    nominatorName.includes(q) ||
+                    taskCategory.includes(q) ||
+                    taskDesc.includes(q) ||
+                    statusStr.includes(q) ||
+                    priorityStr.includes(q) ||
+                    progressStr.includes(q) ||
+                    createdDateStr.includes(q) ||
+                    createdDateFull.includes(q) ||
+                    targetDateStr.includes(q) ||
+                    targetDateFull.includes(q)
                   );
                 });
 

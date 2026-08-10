@@ -1251,17 +1251,43 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
               {(() => {
                 const filteredTasks = tasks.filter(t => {
+                  if (t.archived) return false;
                   if (selectedUserFilter !== 'All' && Number(t.userId) !== Number(selectedUserFilter)) return false;
+                  if (deptFilter !== 'All' && Number(t.user?.departmentId) !== Number(deptFilter)) return false;
+                  if (statusFilter !== 'All' && t.status !== statusFilter) return false;
                   if (priorityFilter !== 'All' && (t.priority || '').toUpperCase() !== priorityFilter.toUpperCase()) return false;
+
                   if (!searchQuery.trim()) return true;
+
                   const q = searchQuery.toLowerCase().trim();
+
+                  const ownerName = (t.user?.name || '').toLowerCase();
+                  const ownerDept = (t.user?.department?.name || '').toLowerCase();
+                  const nominatorName = (t.nominatedBy?.name || '').toLowerCase();
+                  const taskCategory = (t.category || '').toLowerCase();
+                  const taskDesc = (t.taskDescription || '').toLowerCase();
+                  const statusStr = (t.status || '').toLowerCase();
+                  const priorityStr = (t.priority || '').toLowerCase();
+                  const progressStr = `${t.progress}%`;
+
+                  const createdDateStr = t.entryDate ? new Date(t.entryDate).toLocaleDateString('en-US', { dateStyle: 'short' }).toLowerCase() : '';
+                  const createdDateFull = t.entryDate ? new Date(t.entryDate).toLocaleDateString('en-US', { dateStyle: 'medium' }).toLowerCase() : '';
+                  const targetDateStr = t.targetDate ? new Date(t.targetDate).toLocaleDateString('en-US', { dateStyle: 'short' }).toLowerCase() : '';
+                  const targetDateFull = t.targetDate ? new Date(t.targetDate).toLocaleDateString('en-US', { dateStyle: 'medium' }).toLowerCase() : '';
+
                   return (
-                    t.taskDescription?.toLowerCase().includes(q) ||
-                    t.category?.toLowerCase().includes(q) ||
-                    t.user?.name?.toLowerCase().includes(q) ||
-                    t.user?.department?.name?.toLowerCase().includes(q) ||
-                    t.status?.toLowerCase().includes(q) ||
-                    t.priority?.toLowerCase().includes(q)
+                    ownerName.includes(q) ||
+                    ownerDept.includes(q) ||
+                    nominatorName.includes(q) ||
+                    taskCategory.includes(q) ||
+                    taskDesc.includes(q) ||
+                    statusStr.includes(q) ||
+                    priorityStr.includes(q) ||
+                    progressStr.includes(q) ||
+                    createdDateStr.includes(q) ||
+                    createdDateFull.includes(q) ||
+                    targetDateStr.includes(q) ||
+                    targetDateFull.includes(q)
                   );
                 });
 
@@ -1288,7 +1314,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-zinc-200">
-                      {[...filteredTasks].filter(t => !t.archived && t.status !== 'Completed').sort((a, b) => {
+                      {[...filteredTasks].sort((a, b) => {
                         let aVal = sortField.includes('.') ? getVal(a, sortField) : a[sortField];
                         let bVal = sortField.includes('.') ? getVal(b, sortField) : b[sortField];
                         if (sortField === 'targetDate') {
