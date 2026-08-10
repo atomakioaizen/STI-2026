@@ -6,11 +6,20 @@ const globalForPrisma = globalThis;
 
 function createPrismaClient() {
   const rawUrl = process.env.DATABASE_URL || 'postgresql://mock:mock@localhost:5432/mock';
-  const dbUrl = rawUrl.trim().replace(/\\n/g, '');
+  let dbUrl = rawUrl.trim().replace(/\\n/g, '');
+
+  // Automatically switch Supabase Pooler from Session Mode (5432) to Transaction Mode (6543)
+  if (dbUrl.includes('.supabase.com:5432')) {
+    dbUrl = dbUrl.replace('.supabase.com:5432', '.supabase.com:6543');
+  }
+  if (dbUrl.includes('.supabase.com') && !dbUrl.includes('pgbouncer=true')) {
+    dbUrl += (dbUrl.includes('?') ? '&' : '?') + 'pgbouncer=true';
+  }
+
   const pool = new pg.Pool({ 
     connectionString: dbUrl, 
-    max: 2, 
-    idleTimeoutMillis: 1000, 
+    max: 10, 
+    idleTimeoutMillis: 2000, 
     connectionTimeoutMillis: 5000,
     ssl: { rejectUnauthorized: false } 
   });
