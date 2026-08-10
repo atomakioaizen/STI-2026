@@ -1013,7 +1013,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
             Archived Activities
           </h3>
           <p className="text-xs text-zinc-500 font-semibold mt-1">
-            {archivedTasks.length} archived and completed tasks.
+            {archivedTasks.length + tasks.filter(t => t.status === 'Completed' || t.progress === 100).length} archived & completed tasks.
           </p>
           <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
             Open Archive →

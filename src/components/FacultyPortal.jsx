@@ -514,7 +514,7 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
   const ongoingTasks = tasks.filter(t => t.status === 'Ongoing').length;
   const delayedTasks = tasks.filter(t => t.status === 'Delayed').length;
   const awaitingApprovalTasks = tasks.filter(t => t.status === 'Awaiting Approval').length;
-  const completedCount = archivedTasks.length;
+  const completedCount = archivedTasks.length + tasks.filter(t => t.status === 'Completed' || t.progress === 100).length;
 
   return (
     <>
