@@ -73,6 +73,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
   const [reviewStatus, setReviewStatus] = useState('Ongoing');
   const [reviewRemarks, setReviewRemarks] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [reviewUpdating, setReviewUpdating] = useState(false);
   const [customDialog, setCustomDialog] = useState(null);
   const [nominatedTaskToAction, setNominatedTaskToAction] = useState(null);
   const [assignToUserId, setAssignToUserId] = useState('');
@@ -2128,17 +2129,54 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                 <div className="flex gap-3 border-t border-zinc-100 pt-4">
                   <button
                     type="button"
-                    onClick={() => handleRejectCompletion(reviewingTask)}
-                    className="flex-1 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 py-3 text-sm font-black transition"
+                    disabled={Boolean(reviewUpdating)}
+                    onClick={async () => {
+                      if (!reviewRemarks.trim()) {
+                        triggerAlert('Remarks Required', 'Please provide a reason to reject this progress update.');
+                        return;
+                      }
+                      setReviewUpdating('reject');
+                      try {
+                        await handleRejectTaskDirect(reviewingTask.id, reviewRemarks);
+                      } finally {
+                        setReviewUpdating(false);
+                        setReviewingTask(null);
+                        setReviewRemarks('');
+                      }
+                    }}
+                    className="flex-1 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 py-3 text-sm font-black transition flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    ✕ Reject Update
+                    {reviewUpdating === 'reject' ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                        <span>Rejecting...</span>
+                      </>
+                    ) : (
+                      <span>✕ Reject Update</span>
+                    )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleApproveCompletion(reviewingTask)}
-                    className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white py-3 text-sm font-black shadow-lg transition"
+                    disabled={Boolean(reviewUpdating)}
+                    onClick={async () => {
+                      setReviewUpdating('approve');
+                      try {
+                        await handleAcceptUpdate(reviewingTask.id);
+                      } finally {
+                        setReviewUpdating(false);
+                        setReviewingTask(null);
+                      }
+                    }}
+                    className="flex-1 rounded-xl bg-green-600 hover:bg-green-700 text-white py-3 text-sm font-black shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    ✓ Approve{reviewingTask.progress === 100 ? ' & Complete' : ' Update'}
+                    {reviewUpdating === 'approve' ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Approving...</span>
+                      </>
+                    ) : (
+                      <span>✓ Approve{reviewingTask.progress === 100 ? ' & Complete' : ' Update'}</span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -2178,17 +2216,53 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                 <div className="flex gap-3 border-t border-zinc-100 pt-4">
                   <button
                     type="button"
-                    onClick={() => handleRejectDeletion(reviewingTask.id, reviewRemarks)}
-                    className="flex-1 rounded-xl bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 py-3 text-sm font-black transition"
+                    disabled={Boolean(reviewUpdating)}
+                    onClick={async () => {
+                      if (!reviewRemarks.trim()) {
+                        triggerAlert('Remarks Required', 'Please provide a reason to reject this deletion request.');
+                        return;
+                      }
+                      setReviewUpdating('reject_del');
+                      try {
+                        await handleRejectDeletion(reviewingTask.id, reviewRemarks);
+                      } finally {
+                        setReviewUpdating(false);
+                        setReviewingTask(null);
+                      }
+                    }}
+                    className="flex-1 rounded-xl bg-zinc-100 hover:bg-zinc-200 border border-zinc-200 text-zinc-700 py-3 text-sm font-black transition flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    ✕ Reject Deletion
+                    {reviewUpdating === 'reject_del' ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-600 border-t-transparent" />
+                        <span>Rejecting Deletion...</span>
+                      </>
+                    ) : (
+                      <span>✕ Reject Deletion</span>
+                    )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleApproveDeletion(reviewingTask.id)}
-                    className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white py-3 text-sm font-black shadow-lg transition"
+                    disabled={Boolean(reviewUpdating)}
+                    onClick={async () => {
+                      setReviewUpdating('approve_del');
+                      try {
+                        await handleApproveDeletion(reviewingTask.id);
+                      } finally {
+                        setReviewUpdating(false);
+                        setReviewingTask(null);
+                      }
+                    }}
+                    className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white py-3 text-sm font-black shadow-lg transition flex items-center justify-center gap-2 disabled:opacity-60"
                   >
-                    🗑️ Approve Deletion
+                    {reviewUpdating === 'approve_del' ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        <span>Approving Deletion...</span>
+                      </>
+                    ) : (
+                      <span>🗑️ Approve Deletion</span>
+                    )}
                   </button>
                 </div>
               </div>
