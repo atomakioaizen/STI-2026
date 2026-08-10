@@ -5,7 +5,8 @@ import { getSessionUser } from '@/lib/auth';
 export async function GET(request) {
   try {
     const user = await getSessionUser();
-    if (!user || user.role !== 'SCHOOL_ADMIN') {
+    const isAllowed = user && (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'PROGRAM_HEAD');
+    if (!isAllowed) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
