@@ -35,6 +35,15 @@ export default function SuperAlertModal({
   const [actionedNotifIds, setActionedNotifIds] = useState([]);
   const [viewingDetailTask, setViewingDetailTask] = useState(null);
   const [onlyActionNeeded, setOnlyActionNeeded] = useState(false);
+  const [processingTaskId, setProcessingTaskId] = useState(null);
+  const [actionToast, setActionToast] = useState(null);
+
+  const showToast = (msg) => {
+    setActionToast(msg);
+    setTimeout(() => {
+      setActionToast(null);
+    }, 2800);
+  };
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -279,6 +288,7 @@ export default function SuperAlertModal({
     const taskId = rejectingTaskId;
     setActionedTaskIds(prev => [...prev, taskId]);
     setSubmittingReject(true);
+    showToast('✓ Request rejected & returned.');
     try {
       const task = tasks.find(t => t.id === taskId);
       if (task && task.status === 'Awaiting Deletion') {
@@ -332,6 +342,12 @@ export default function SuperAlertModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-fadeIn">
+      {actionToast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[10000] bg-emerald-600 border border-emerald-400 text-white font-black text-xs px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 animate-bounce">
+          <Check className="h-4 w-4" />
+          {actionToast}
+        </div>
+      )}
       <div 
         className={`bg-white rounded-2xl border-4 shadow-2xl p-5 text-zinc-900 animate-scaleIn relative flex flex-col transition-all duration-300 ${
           activeTab === 'inbox' ? 'border-purple-650 w-full max-w-6xl' : 'border-red-500 w-full max-w-xl'
@@ -529,24 +545,32 @@ export default function SuperAlertModal({
                                   </div>
                                 </div>
 
-                                {/* Nomination Buttons */}
+                                 {/* Nomination Buttons */}
                                 {isNomination && (
                                   <div className="flex gap-2 mt-2 pt-2 border-t border-blue-200/40">
                                     <button 
                                       onClick={async (e) => { 
                                         e.stopPropagation(); 
+                                        setProcessingTaskId(t.id);
                                         setActionedTaskIds(prev => [...prev, t.id]);
+                                        showToast('✓ Nomination Accepted!');
                                         try {
                                           if (onAcceptTask) await onAcceptTask(t.id);
                                         } catch (err) { console.error(err); }
                                         finally {
+                                          setProcessingTaskId(null);
                                           if (onRefresh) onRefresh();
                                           if (refreshDashboard) refreshDashboard();
                                         }
                                       }}
                                       className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 active:scale-[0.98] transition"
                                     >
-                                      <Check className="h-3 w-3" /> Accept
+                                      {processingTaskId === t.id ? (
+                                        <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                                      ) : (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                      Accept
                                     </button>
                                     <button 
                                       onClick={(e) => handleRejectClick(e, t.id)}
@@ -569,7 +593,9 @@ export default function SuperAlertModal({
                                     <button 
                                       onClick={async (e) => { 
                                         e.stopPropagation(); 
+                                        setProcessingTaskId(t.id);
                                         setActionedTaskIds(prev => [...prev, t.id]);
+                                        showToast('✓ Progress Approved!');
                                         try {
                                           if (onAcceptDelete) {
                                             await onAcceptDelete(t.id, false);
@@ -578,13 +604,19 @@ export default function SuperAlertModal({
                                           }
                                         } catch (err) { console.error(err); }
                                         finally {
+                                          setProcessingTaskId(null);
                                           if (onRefresh) onRefresh();
                                           if (refreshDashboard) refreshDashboard();
                                         }
                                       }}
                                       className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 active:scale-[0.98] transition"
                                     >
-                                      <Check className="h-3 w-3" /> Approve {t.progress === 100 ? 'Completion' : 'Update'}
+                                      {processingTaskId === t.id ? (
+                                        <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                                      ) : (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                      Approve {t.progress === 100 ? 'Completion' : 'Update'}
                                     </button>
                                   </div>
                                 )}
@@ -815,24 +847,32 @@ export default function SuperAlertModal({
                                     Rejection Reason: "{t.rejectionReason}"
                                   </p>
                                 )}
-                                {/* Own Pending Acceptance Buttons */}
+                                 {/* Own Pending Acceptance Buttons */}
                                 {isNomination && (
                                   <div className="flex gap-2 mt-2 pt-2 border-t border-blue-200/40">
                                     <button 
                                       onClick={async (e) => { 
                                         e.stopPropagation(); 
+                                        setProcessingTaskId(t.id);
                                         setActionedTaskIds(prev => [...prev, t.id]);
+                                        showToast('✓ Task Accepted!');
                                         try {
                                           if (onAcceptTask) await onAcceptTask(t.id);
                                         } catch (err) { console.error(err); }
                                         finally {
+                                          setProcessingTaskId(null);
                                           if (onRefresh) onRefresh();
                                           if (refreshDashboard) refreshDashboard();
                                         }
                                       }}
                                       className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold text-[10px] py-1.5 px-2 rounded-lg flex items-center justify-center gap-1 active:scale-[0.98] transition"
                                     >
-                                      <Check className="h-3 w-3" /> Accept Task
+                                      {processingTaskId === t.id ? (
+                                        <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                                      ) : (
+                                        <Check className="h-3 w-3" />
+                                      )}
+                                      Accept Task
                                     </button>
                                     <button 
                                       onClick={(e) => handleRejectClick(e, t.id)}
