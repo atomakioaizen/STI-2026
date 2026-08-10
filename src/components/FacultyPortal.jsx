@@ -866,9 +866,11 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
                       if (task.status === 'Awaiting Deletion') statusColor = 'text-orange-800 bg-orange-100 border-orange-200';
                       if (task.status === 'Rejected') statusColor = 'text-rose-800 bg-rose-100 border-rose-300';
 
-                      let prioColor = 'text-zinc-700 bg-zinc-100';
-                      if (task.priority === 'High') prioColor = 'text-red-700 bg-red-100';
-                      if (task.priority === 'Medium') prioColor = 'text-yellow-750 bg-yellow-100';
+                      const pUpper = (task.priority || '').toUpperCase();
+                      let prioColor = 'text-zinc-700 bg-zinc-100 border border-zinc-200';
+                      if (pUpper === 'HIGH') prioColor = 'text-red-800 bg-red-100 border border-red-200 font-black';
+                      else if (pUpper === 'MEDIUM') prioColor = 'text-amber-800 bg-amber-100 border border-amber-200 font-bold';
+                      else prioColor = 'text-zinc-700 bg-zinc-100 border border-zinc-200 font-medium';
 
                       return (
                         <tr key={task.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition group border-b border-zinc-200`}>

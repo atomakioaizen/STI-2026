@@ -1211,8 +1211,8 @@ export default function SuperAlertModal({
                     {viewingDetailTask.category || 'Deliverable'}
                   </span>
                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase whitespace-nowrap ${
-                    viewingDetailTask.priority === 'High' ? 'bg-red-100 text-red-800 border border-red-200' :
-                    viewingDetailTask.priority === 'Medium' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-blue-100 text-blue-800 border border-blue-200'
+                    (viewingDetailTask.priority || '').toUpperCase() === 'HIGH' ? 'bg-red-100 text-red-800 border border-red-200' :
+                    (viewingDetailTask.priority || '').toUpperCase() === 'MEDIUM' ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-zinc-100 text-zinc-700 border border-zinc-200'
                   }`}>
                     Priority: {viewingDetailTask.priority}
                   </span>
