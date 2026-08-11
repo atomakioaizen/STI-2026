@@ -701,23 +701,27 @@ export default function SuperAlertModal({
                         try { details = JSON.parse(n.details); } catch(e){}
 
                         const isAccepted = n.action === 'TASK_ACCEPTED';
+                        const isApproved = n.action === 'TASK_APPROVED';
+                        const isProgressRejected = n.action === 'PROGRESS_REJECTED';
                         const isRejectedNotif = n.action === 'TASK_REJECTED';
                         const isRestored = n.action === 'TASK_RESTORED';
 
                         const titleText = isAccepted ? 'Deliverable Accepted'
+                          : isApproved ? 'Progress Approved'
+                          : isProgressRejected ? 'Progress Rejected'
                           : isRejectedNotif ? 'Deliverable Rejected'
                           : isRestored ? 'Task Restored'
                           : 'Nomination Rejected';
 
-                        const borderStyle = isAccepted ? 'border-green-200 bg-green-50/20'
+                        const borderStyle = (isAccepted || isApproved) ? 'border-green-200 bg-green-50/20'
                           : isRestored ? 'border-blue-200 bg-blue-50/20'
                           : 'border-red-200 bg-red-50/20';
 
-                        const badgeStyle = isAccepted ? 'bg-green-100 text-green-800'
+                        const badgeStyle = (isAccepted || isApproved) ? 'bg-green-100 text-green-800'
                           : isRestored ? 'bg-blue-100 text-blue-800'
                           : 'bg-red-100 text-red-800';
 
-                        const iconComp = isAccepted ? <Check className="h-4.5 w-4.5 text-green-600" />
+                        const iconComp = (isAccepted || isApproved) ? <Check className="h-4.5 w-4.5 text-green-600" />
                           : isRestored ? <Inbox className="h-4.5 w-4.5 text-blue-600" />
                           : <AlertTriangle className="h-4.5 w-4.5 text-red-600" />;
 
@@ -739,6 +743,10 @@ export default function SuperAlertModal({
                                 <p className="font-extrabold text-zinc-950 text-xs mt-1.5 leading-snug">
                                   {isAccepted ? (
                                     <>{details.assigneeName} accepted deliverable nomination <span className="font-black text-zinc-900">"{details.taskDescription}"</span>.</>
+                                  ) : isApproved ? (
+                                    <>Supervisor {details.supervisorName || 'Supervisor'} approved progress update for <span className="font-black text-zinc-900">"{details.taskDescription}"</span>.</>
+                                  ) : isProgressRejected ? (
+                                    <>Supervisor {details.supervisorName || 'Supervisor'} rejected progress update for <span className="font-black text-zinc-900">"{details.taskDescription}"</span>.</>
                                   ) : isRejectedNotif ? (
                                     <>{details.assigneeName} rejected deliverable nomination <span className="font-black text-zinc-900">"{details.taskDescription}"</span>.</>
                                   ) : isRestored ? (

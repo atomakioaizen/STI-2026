@@ -378,6 +378,7 @@ export default function DashboardClient({ user }) {
               <h1 className="text-lg font-black tracking-tight text-zinc-950 flex items-center gap-2">
                 Puerto Princesa
                 <span className="text-xs text-zinc-400 font-bold border-l border-zinc-200 pl-2 uppercase tracking-wider">Task Monitor</span>
+                <span className="text-xs font-black text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">v1.3</span>
               </h1>
             </div>
 
@@ -439,11 +440,20 @@ export default function DashboardClient({ user }) {
                         {viewOnlyNotices.map(v => {
                           const isAccepted = v.type === 'TASK_ACCEPTED';
                           const isApproved = v.type === 'TASK_APPROVED';
-                          const isRejectedNotif = v.type === 'TASK_REJECTED' || v.type === 'PROGRESS_REJECTED' || v.type === 'REJECTED_DELETED';
+                          const isProgressRejected = v.type === 'PROGRESS_REJECTED';
+                          const isRejectedDeleted = v.type === 'REJECTED_DELETED';
+                          const isTaskRejected = v.type === 'TASK_REJECTED';
                           const isRestored = v.type === 'TASK_RESTORED';
                           const isDelayedNotif = v.type === 'TASK_DELAYED';
 
-                          const titleText = isAccepted ? 'Deliverable Accepted ✓' : isApproved ? 'Progress Approved ✓' : isRestored ? 'Task Restored ✓' : isDelayedNotif ? 'Task Delayed ⚠️' : 'Deliverable Rejected';
+                          const titleText = isAccepted ? 'Deliverable Accepted ✓'
+                            : isApproved ? 'Progress Approved ✓'
+                            : isProgressRejected ? 'Progress Rejected ✕'
+                            : isRestored ? 'Task Restored ✓'
+                            : isDelayedNotif ? 'Task Delayed ⚠️'
+                            : isRejectedDeleted ? 'Nomination Rejected ✕'
+                            : 'Deliverable Rejected ✕';
+
                           const badgeStyle = isAccepted || isApproved ? 'text-green-700' : isRestored ? 'text-blue-700' : 'text-red-700';
                           const cardBorder = isAccepted || isApproved ? 'bg-green-50/50 border-green-200' : isRestored ? 'bg-blue-50/50 border-blue-200' : 'bg-red-50/50 border-red-200';
                           const iconComp = isAccepted || isApproved ? <CheckCircle2 className="h-3 w-3 text-green-600" /> : isRestored ? <CheckCircle2 className="h-3 w-3 text-blue-600" /> : <AlertTriangle className="h-3 w-3 text-red-600" />;
@@ -473,14 +483,20 @@ export default function DashboardClient({ user }) {
                                 {isApproved && (
                                   <>Supervisor {v.details?.supervisorName || 'Supervisor'} approved progress update for <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>.</>
                                 )}
+                                {isProgressRejected && (
+                                  <>Supervisor {v.details?.supervisorName || 'Supervisor'} rejected progress update for <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>. {v.details?.rejectionReason ? `Reason: "${v.details.rejectionReason}"` : ''}</>
+                                )}
+                                {isRejectedDeleted && (
+                                  <>Self-nominated task <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span> was rejected and deleted by {v.details?.supervisorName || 'Supervisor'}. {v.details?.remarks ? `Reason: "${v.details.remarks}"` : ''}</>
+                                )}
+                                {isTaskRejected && (
+                                  <>{v.details?.assigneeName || 'User'} rejected deliverable nomination <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>. {v.details?.rejectionReason ? `Reason: "${v.details.rejectionReason}"` : ''}</>
+                                )}
                                 {isRestored && (
                                   <>Your archived task <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span> was restored. It is now active (Ongoing).</>
                                 )}
                                 {isDelayedNotif && (
                                   <>Task <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span> has passed its target deadline and is now marked as Delayed.</>
-                                )}
-                                {isRejectedNotif && (
-                                  <>{v.details?.assigneeName || 'User'} rejected deliverable <span className="text-zinc-950 font-black">"{v.details?.taskDescription}"</span>. {v.details?.rejectionReason || v.details?.remarks ? `Reason: "${v.details.rejectionReason || v.details.remarks}"` : ''}</>
                                 )}
                               </p>
                             </div>
@@ -827,7 +843,7 @@ export default function DashboardClient({ user }) {
       )}
 
       <footer className="py-6 text-center text-xs text-zinc-500 border-t border-zinc-200 bg-white">
-        <p>DEV:ATM © 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.</p>
+        <p>DEV:ATM v1.3 © 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.</p>
       </footer>
     </div>
   );

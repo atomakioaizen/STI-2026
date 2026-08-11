@@ -155,7 +155,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">
-          DEV:ATM © 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.
+          DEV:ATM v1.3 © 2026 STI College Puerto Princesa Task Monitoring System. All rights reserved.
         </p>
       </div>
     </div>

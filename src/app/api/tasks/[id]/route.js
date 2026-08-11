@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
+import { getTaskDelayDays } from '@/lib/taskHelpers';
 
 function appendMessage(existingRemarks, senderName, senderRole, text) {
   let messages = [];
@@ -109,6 +110,50 @@ export async function PATCH(request, { params }) {
     const updates = await request.json();
     const data = {};
     let currentRemarks = task.remarks;
+
+    // Delay Monitoring Enforcement: Block 100% Completion if 3+ days delayed and notice/reply incomplete
+    const isCompletingAttempt = (updates.progress !== undefined && parseInt(updates.progress, 10) === 100) || updates.status === 'Completed';
+
+    if (isCompletingAttempt) {
+      const delayDays = getTaskDelayDays(task);
+      if (delayDays >= 3) {
+        let remarksList = [];
+        if (task.remarks) {
+          try {
+            const parsed = JSON.parse(task.remarks);
+            if (Array.isArray(parsed)) remarksList = parsed;
+          } catch(e){}
+        }
+
+        const adminNoticeEntry = remarksList.find(m => 
+          (m.message || '').includes('[ADMIN_ESCALATION]') || 
+          (m.message || '').includes('[ADMIN_NOTICE]') || 
+          (m.message || '').includes('[SUPERVISOR_ACTION]')
+        );
+        const userReplyEntry = remarksList.find(m => 
+          (m.message || '').includes('[USER_REPLY]') || 
+          (m.message || '').includes('[STAFF_REPLY]')
+        );
+
+        if (!adminNoticeEntry) {
+          return NextResponse.json({
+            error: 'DELAY_NOTICE_REQUIRED',
+            code: 'DELAY_NOTICE_REQUIRED',
+            delayDays: delayDays,
+            message: `Task Completion Blocked: This activity has a delay of ${delayDays} days and is subject to Delay Monitoring. Please wait for the School Administrator to issue a formal Justification or Notice to Explain (NTE) request before completing this activity.`
+          }, { status: 400 });
+        }
+
+        if (!userReplyEntry) {
+          return NextResponse.json({
+            error: 'USER_REPLY_REQUIRED',
+            code: 'USER_REPLY_REQUIRED',
+            delayDays: delayDays,
+            message: `Task Completion Blocked: A formal Notice / Justification request has been issued by the School Administrator for this delayed activity. You must submit your reply and attach your repository letter document in the Delay Monitoring panel before marking this activity as 100% complete.`
+          }, { status: 400 });
+        }
+      }
+    }
 
     if (updates.category !== undefined) data.category = updates.category.trim();
     if (updates.taskDescription !== undefined) data.taskDescription = updates.taskDescription.trim();

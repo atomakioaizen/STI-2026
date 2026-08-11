@@ -8,10 +8,12 @@ import {
 } from 'lucide-react';
 import CalendarView from './CalendarView';
 import SuperAlertModal from './SuperAlertModal';
+import DelayEscalationModal from './DelayEscalationModal';
+import DelayBlockAlertModal from './DelayBlockAlertModal';
 import AssigneeCombobox from './AssigneeCombobox';
 import { exportTasksToExcel } from '@/lib/reports';
 import { generateProfessionalExcelReport } from '@/lib/excelReport';
-import { getTaskActorInfo, getPendingElapsedInfo } from '@/lib/taskHelpers';
+import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays } from '@/lib/taskHelpers';
 const renderRemarksLog = (remarksStr) => {
   if (!remarksStr) return null;
   try {
@@ -55,6 +57,7 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
   // Active Modals
   const [activeModal, setActiveModal] = useState(null); // 'faculty_tasks' | 'my_tasks' | 'calendar' | 'notifications' | 'archive' | 'nominate'
   const [showSuperAlert, setShowSuperAlert] = useState(true);
+  const [delayBlockInfo, setDelayBlockInfo] = useState({ isOpen: false });
   const [warningActiveTab, setWarningActiveTab] = useState('All');
 
   // Filters
@@ -726,6 +729,18 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
         setEditingTask(null);
         fetchTasks();
         fetchArchivedTasks();
+      } else {
+        const errData = await res.json();
+        if (errData.code === 'DELAY_NOTICE_REQUIRED' || errData.code === 'USER_REPLY_REQUIRED') {
+          setDelayBlockInfo({
+            isOpen: true,
+            code: errData.code,
+            delayDays: errData.delayDays,
+            message: errData.message
+          });
+          return;
+        }
+        triggerAlert('Update Failed', errData.message || errData.error || 'Failed to update task.');
       }
     } catch (err) {
       console.error('Error updating self task', err);
@@ -994,12 +1009,49 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
           </span>
         </button>
 
+        {/* Card 5: Delay & Escalations Tracker (Stat Card #1) */}
+        <button
+          onClick={() => setActiveModal('delay_tracker')}
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-500 rounded-2xl p-6 text-left shadow-sm transition-all duration-300 group flex flex-col justify-between hover:shadow-md min-h-[200px]"
+        >
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition duration-300">
+              <Clock className="h-6 w-6 text-red-600" />
+            </div>
+            {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length > 0 && (
+              <span className="bg-red-100 text-red-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
+                {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length} Delayed
+              </span>
+            )}
+          </div>
+          <div>
+            <h3 className="font-black text-lg text-zinc-900 group-hover:text-red-600 transition duration-300 leading-tight">
+              Delay &amp; Justification Tracker
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-2 leading-relaxed">
+              Track delay days, 3-day justifications, &amp; 4-7+ day NTE Drive reference links.
+            </p>
+          </div>
+          <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 mt-2">
+            Open Tracker →
+          </span>
+        </button>
+
       </div>
 
 
       </div>
 
       {/* ──────────────────────────────── MODALS ──────────────────────────────── */}
+
+      {/* Delay & Escalation Tracker Modal (Stat Card #1) */}
+      <DelayEscalationModal
+        isOpen={activeModal === 'delay_tracker'}
+        onClose={() => setActiveModal(null)}
+        tasks={[...tasks, ...archivedTasks]}
+        user={user}
+        onRefresh={fetchArchivedTasks}
+      />
 
       {/* Faculty Tasks List Modal */}
 
@@ -1809,6 +1861,8 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                         <tr>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.name'), setArchiveSortDirection('asc')); }}>Owner {archiveSortField === 'user.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'taskDescription' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('taskDescription'), setArchiveSortDirection('asc')); }}>Task Details {archiveSortField === 'taskDescription' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'priority' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('priority'), setArchiveSortDirection('asc')); }}>Priority Level {archiveSortField === 'priority' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4">Approved By</th>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'updatedAt' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('updatedAt'), setArchiveSortDirection('asc')); }}>Completion Date {archiveSortField === 'updatedAt' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                           <th className="py-2.5 px-4 text-right">Status</th>
                         </tr>
@@ -1827,27 +1881,38 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
                           if (aVal < bVal) return archiveSortDirection === 'asc' ? -1 : 1;
                           if (aVal > bVal) return archiveSortDirection === 'asc' ? 1 : -1;
                           return 0;
-                        }).map((t, idx) => (
-                          <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition`}>
-                            <td className="py-3 px-4 font-bold text-zinc-800">{t.user?.name}</td>
-                            <td className="py-3 px-4">
-                              <div>
-                                <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
-                                  {t.category}
+                        }).map((t, idx) => {
+                          const actorInfo = getTaskActorInfo(t);
+                          const approverName = actorInfo.lastActionBy || t.nominatedBy?.name || 'School Administrator';
+
+                          return (
+                            <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition`}>
+                              <td className="py-3 px-4 font-bold text-zinc-800">{t.user?.name}</td>
+                              <td className="py-3 px-4">
+                                <div>
+                                  <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
+                                    {t.category}
+                                  </span>
+                                  <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-xs font-semibold text-zinc-700">
+                                {t.priority || 'Medium'}
+                              </td>
+                              <td className="py-3 px-4 text-xs font-semibold text-zinc-700">
+                                {approverName}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-zinc-500">
+                                {new Date(t.updatedAt).toLocaleDateString()}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
+                                  Completed / Archived
                                 </span>
-                                <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 font-semibold text-zinc-500">
-                              {new Date(t.updatedAt).toLocaleDateString()}
-                            </td>
-                            <td className="py-3 px-4 text-right">
-                              <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
-                                Completed / Archived
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2555,7 +2620,13 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
           </div>
         </div>
       )}
-  
+
+      <DelayBlockAlertModal 
+        isOpen={delayBlockInfo.isOpen}
+        onClose={() => setDelayBlockInfo({ isOpen: false })}
+        onOpenTracker={() => setActiveModal('delay_escalation')}
+        blockInfo={delayBlockInfo}
+      />
     </>
   );
 }

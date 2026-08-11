@@ -9,10 +9,13 @@ import {
 import CalendarView from './CalendarView';
 import InsightsView from './InsightsView';
 import SuperAlertModal from './SuperAlertModal';
+import DelayEscalationModal from './DelayEscalationModal';
+import SupervisorResponsivenessModal from './SupervisorResponsivenessModal';
+import DelayBlockAlertModal from './DelayBlockAlertModal';
 import AssigneeCombobox from './AssigneeCombobox';
 import { exportTasksToExcel } from '@/lib/reports';
 import { generateProfessionalExcelReport } from '@/lib/excelReport';
-import { getTaskActorInfo, getPendingElapsedInfo } from '@/lib/taskHelpers';
+import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays, getSupervisorInactivityList } from '@/lib/taskHelpers';
 
 const renderRemarksLog = (remarksStr) => {
   if (!remarksStr) return null;
@@ -59,6 +62,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
   // Active Modals / Views
   const [activeModal, setActiveModal] = useState(null); // 'tasks' | 'users' | 'departments' | 'calendar' | 'insights' | 'archive' | 'nominate'
   const [showSuperAlert, setShowSuperAlert] = useState(true);
+  const [delayBlockInfo, setDelayBlockInfo] = useState({ isOpen: false });
 
   const getVal = (obj, path) => {
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
@@ -1020,17 +1024,71 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
           </span>
         </button>
 
-        {/* Card 6: Audit Logs & Insights (SCHOOL_ADMIN ONLY) */}
+        {/* Card 6: Delay & Escalations Tracker (Stat Card #1) */}
+        <button
+          onClick={() => setActiveModal('delay_tracker')}
+          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-400 rounded-2xl p-6 text-left shadow-sm transition group"
+        >
+          <div className="flex justify-between items-start w-full">
+            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition inline-block">
+              <Clock className="h-6 w-6 text-red-600" />
+            </div>
+            {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length > 0 && (
+              <span className="bg-red-100 text-red-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
+                {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length} Delayed
+              </span>
+            )}
+          </div>
+          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-red-600 transition leading-tight">
+            Delay &amp; Justification Tracker
+          </h3>
+          <p className="text-xs text-zinc-500 font-semibold mt-1">
+            Track delay days, 3-day justifications, &amp; 4-7+ day NTE Drive reference links.
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-red-600">
+            Open Tracker →
+          </span>
+        </button>
+
+        {/* Card 7: Supervisor Responsiveness Tracker (Stat Card #2 - SCHOOL_ADMIN ONLY) */}
+        {user.role === 'SCHOOL_ADMIN' && (
+          <button
+            onClick={() => setActiveModal('supervisor_responsiveness')}
+            className="bg-white hover:bg-zinc-50 border border-purple-200 hover:border-purple-400 rounded-2xl p-6 text-left shadow-sm transition group border-2 border-dashed"
+          >
+            <div className="flex justify-between items-start w-full">
+              <div className="p-3 bg-purple-100 rounded-xl group-hover:bg-purple-200 transition inline-block">
+                <ShieldAlert className="h-6 w-6 text-purple-750" />
+              </div>
+              {getSupervisorInactivityList(tasks, users).reduce((acc, g) => acc + g.unactedCount, 0) > 0 && (
+                <span className="bg-purple-100 text-purple-900 text-[10px] px-2.5 py-1 rounded-full font-black border border-purple-300">
+                  {getSupervisorInactivityList(tasks, users).reduce((acc, g) => acc + g.unactedCount, 0)} Inactive
+                </span>
+              )}
+            </div>
+            <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-purple-800 transition leading-tight">
+              Supervisor Responsiveness Tracker
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-1">
+              Executive view: Collapsible Program Head &amp; Principal unacted submissions tracker.
+            </p>
+            <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-purple-750">
+              Inspect Supervisor Inactivity →
+            </span>
+          </button>
+        )}
+
+        {/* Card 8: Audit Logs & Insights (SCHOOL_ADMIN ONLY) */}
         {user.role === 'SCHOOL_ADMIN' && (
           <button
             onClick={() => setActiveModal('insights')}
-            className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group border-2 border-dashed border-purple-300"
+            className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
           >
-            <div className="p-3 bg-purple-100 rounded-xl group-hover:bg-purple-200 transition inline-block">
-              <ShieldAlert className="h-6 w-6 text-purple-750 animate-pulse" />
+            <div className="p-3 bg-purple-50 rounded-xl group-hover:bg-purple-100 transition inline-block">
+              <TrendingUp className="h-6 w-6 text-purple-700" />
             </div>
             <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-purple-800 transition">
-              Activity Insights & Logs
+              Activity Insights &amp; Logs
             </h3>
             <p className="text-xs text-zinc-500 font-semibold mt-1">
               Check actions, logins, and movements of all types of user logs.
@@ -1908,6 +1966,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.name'), setArchiveSortDirection('asc')); }}>Owner {archiveSortField === 'user.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'user.department.name' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('user.department.name'), setArchiveSortDirection('asc')); }}>Department {archiveSortField === 'user.department.name' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'taskDescription' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('taskDescription'), setArchiveSortDirection('asc')); }}>Task Details {archiveSortField === 'taskDescription' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'priority' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('priority'), setArchiveSortDirection('asc')); }}>Priority Level {archiveSortField === 'priority' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
+                          <th className="py-2.5 px-4">Approved By</th>
                           <th className="py-2.5 px-4 cursor-pointer hover:bg-zinc-100 transition" onClick={() => { archiveSortField === 'updatedAt' ? setArchiveSortDirection(d => d === 'asc' ? 'desc' : 'asc') : (setArchiveSortField('updatedAt'), setArchiveSortDirection('asc')); }}>Completion Date {archiveSortField === 'updatedAt' ? (archiveSortDirection === 'asc' ? '▲' : '▼') : ''}</th>
                           <th className="py-2.5 px-4 text-right">Actions</th>
                         </tr>
@@ -1926,45 +1986,56 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
                           if (aVal < bVal) return archiveSortDirection === 'asc' ? -1 : 1;
                           if (aVal > bVal) return archiveSortDirection === 'asc' ? 1 : -1;
                           return 0;
-                        }).map((t, idx) => (
-                      <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition border-b border-zinc-200`}>
-                        <td className="py-3 px-4 font-bold text-zinc-800">{t.user?.name}</td>
-                        <td className="py-3 px-4 text-zinc-550 font-semibold">{t.user?.department?.name || 'No Dept'}</td>
-                        <td className="py-3 px-4">
-                          <div>
-                            <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
-                              {t.category}
-                            </span>
-                            <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-zinc-550">
-                          {new Date(t.updatedAt).toLocaleDateString()}
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          {(user.role === 'SCHOOL_ADMIN' || user.role === 'PRINCIPAL') ? (
-                            <div className="flex justify-end gap-1">
-                              <button
-                                onClick={() => handleRestoreTask(t.id)}
-                                className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-1 rounded border border-zinc-200 font-bold"
-                              >
-                                Restore
-                              </button>
-                              <button
-                                onClick={() => handleDeleteTask(t.id)}
-                                className="text-xs bg-red-50 hover:bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-bold"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
-                              Completed / Archived
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                        }).map((t, idx) => {
+                          const actorInfo = getTaskActorInfo(t);
+                          const approverName = actorInfo.lastActionBy || t.nominatedBy?.name || 'School Administrator';
+
+                          return (
+                            <tr key={t.id} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-zinc-100'} hover:bg-zinc-200/50 transition border-b border-zinc-200`}>
+                              <td className="py-3 px-4 font-bold text-zinc-800">{t.user?.name}</td>
+                              <td className="py-3 px-4 text-zinc-550 font-semibold">{t.user?.department?.name || 'No Dept'}</td>
+                              <td className="py-3 px-4">
+                                <div>
+                                  <span className="bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-bold text-[9px] uppercase">
+                                    {t.category}
+                                  </span>
+                                  <p className="font-bold text-zinc-800 mt-1">{t.taskDescription}</p>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-xs font-semibold text-zinc-700">
+                                {t.priority || 'Medium'}
+                              </td>
+                              <td className="py-3 px-4 text-xs font-semibold text-zinc-700">
+                                {approverName}
+                              </td>
+                              <td className="py-3 px-4 font-semibold text-zinc-550">
+                                {new Date(t.updatedAt).toLocaleDateString()}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                {(user.role === 'SCHOOL_ADMIN' || user.role === 'PRINCIPAL') ? (
+                                  <div className="flex justify-end gap-1">
+                                    <button
+                                      onClick={() => handleRestoreTask(t.id)}
+                                      className="text-xs bg-zinc-100 hover:bg-zinc-200 text-zinc-700 px-2 py-1 rounded border border-zinc-200 font-bold"
+                                    >
+                                      Restore
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteTask(t.id)}
+                                      className="text-xs bg-red-50 hover:bg-red-100 text-red-700 px-2 py-1 rounded border border-red-200 font-bold"
+                                    >
+                                      Delete
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] bg-green-100 text-green-800 border border-green-200 px-2 py-0.5 rounded-full font-bold">
+                                    Completed / Archived
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
                   </tbody>
                     </table>
                   </div>
@@ -2002,6 +2073,23 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
           onDeleteNotification={onDeleteNotification}
         />
       )}
+
+      {/* Delay & Escalation Tracker Modal (Stat Card #1) */}
+      <DelayEscalationModal
+        isOpen={activeModal === 'delay_tracker'}
+        onClose={() => setActiveModal(null)}
+        tasks={[...tasks, ...archivedTasks]}
+        user={user}
+        onRefresh={fetchTasks}
+      />
+
+      {/* Supervisor Responsiveness Tracker Modal (Stat Card #2 - SCHOOL_ADMIN ONLY) */}
+      <SupervisorResponsivenessModal
+        isOpen={activeModal === 'supervisor_responsiveness'}
+        onClose={() => setActiveModal(null)}
+        tasks={tasks}
+        users={users}
+      />
 
       {/* Nominate / Assign task modal */}
       {activeModal === 'nominate' && (
@@ -2838,6 +2926,13 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
           </div>
         </div>
       )}
+
+      <DelayBlockAlertModal 
+        isOpen={delayBlockInfo.isOpen}
+        onClose={() => setDelayBlockInfo({ isOpen: false })}
+        onOpenTracker={() => setActiveModal('delay_escalation')}
+        blockInfo={delayBlockInfo}
+      />
     </>
   );
 }
