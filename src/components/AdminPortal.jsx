@@ -882,27 +882,29 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
       {/* Cards Navigation */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         
-        {/* Card 1: Task Nominations */}
-        <button
-          onClick={() => {
-            setSelectedUserFilter('All');
-            setActiveModal('tasks');
-          }}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
-        >
-          <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition inline-block">
-            <List className="h-6 w-6 text-blue-600" />
-          </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-blue-600 transition">
-            Manage Tasks
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            Check and review task completion, nominations, and delayed requests across departments.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-600">
-            Open Tasks List →
-          </span>
-        </button>
+        {/* Card 1: Task Nominations / Institutional Deliverables */}
+        {user.role !== 'SECRETARY' && (
+          <button
+            onClick={() => {
+              setSelectedUserFilter('All');
+              setActiveModal('tasks');
+            }}
+            className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-zinc-300 rounded-2xl p-6 text-left shadow-sm transition group"
+          >
+            <div className="p-3 bg-blue-50 rounded-xl group-hover:bg-blue-100 transition inline-block">
+              <List className="h-6 w-6 text-blue-600" />
+            </div>
+            <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-blue-600 transition">
+              Manage Tasks
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-1">
+              Check and review task completion, nominations, and delayed requests across departments.
+            </p>
+            <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-blue-600">
+              Open Tasks List →
+            </span>
+          </button>
+        )}
 
         {/* Card: My Self Nominations */}
         {(() => {
@@ -1026,30 +1028,32 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         </button>
 
         {/* Card 6: Delay & Escalations Tracker (Stat Card #1) */}
-        <button
-          onClick={() => setActiveModal('delay_tracker')}
-          className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-400 rounded-2xl p-6 text-left shadow-sm transition group"
-        >
-          <div className="flex justify-between items-start w-full">
-            <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition inline-block">
-              <Clock className="h-6 w-6 text-red-600" />
+        {user.role !== 'SECRETARY' && (
+          <button
+            onClick={() => setActiveModal('delay_tracker')}
+            className="bg-white hover:bg-zinc-50 border border-zinc-200 hover:border-red-400 rounded-2xl p-6 text-left shadow-sm transition group"
+          >
+            <div className="flex justify-between items-start w-full">
+              <div className="p-3 bg-red-50 rounded-xl group-hover:bg-red-100 transition inline-block">
+                <Clock className="h-6 w-6 text-red-600" />
+              </div>
+              {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length > 0 && (
+                <span className="bg-red-100 text-red-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
+                  {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length} Delayed
+                </span>
+              )}
             </div>
-            {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length > 0 && (
-              <span className="bg-red-100 text-red-800 text-[10px] px-2.5 py-1 rounded-full font-black border border-red-200 animate-pulse">
-                {tasks.filter(t => !t.archived && t.status !== 'Completed' && getTaskDelayDays(t) >= 3).length} Delayed
-              </span>
-            )}
-          </div>
-          <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-red-600 transition leading-tight">
-            Delay &amp; Justification Tracker
-          </h3>
-          <p className="text-xs text-zinc-500 font-semibold mt-1">
-            Track delay days, 3-day justifications, &amp; 4-7+ day NTE Drive reference links.
-          </p>
-          <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-red-600">
-            Open Tracker →
-          </span>
-        </button>
+            <h3 className="mt-4 font-black text-lg text-zinc-900 group-hover:text-red-600 transition leading-tight">
+              Delay &amp; Justification Tracker
+            </h3>
+            <p className="text-xs text-zinc-500 font-semibold mt-1">
+              Track delay days, 3-day justifications, &amp; 4-7+ day NTE Drive reference links.
+            </p>
+            <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-red-600">
+              Open Tracker →
+            </span>
+          </button>
+        )}
 
         {/* Card 7: Supervisor Responsiveness Tracker (SCHOOL_ADMIN & SECRETARY) */}
         {(user.role === 'SCHOOL_ADMIN' || user.role === 'SECRETARY') && (
