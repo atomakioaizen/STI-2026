@@ -810,9 +810,10 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     }
   };
 
-  const delayedCount = tasks.filter(t => t.status === 'Delayed').length;
-  const awaitingApprovalCount = tasks.filter(t => t.status === 'Awaiting Approval').length;
-  const awaitingDeletionCount = tasks.filter(t => t.status === 'Awaiting Deletion').length;
+  const scopedTasksForWarnings = user.role === 'SECRETARY' ? tasks.filter(t => Number(t.userId) === Number(user.id)) : tasks;
+  const delayedCount = scopedTasksForWarnings.filter(t => t.status === 'Delayed').length;
+  const awaitingApprovalCount = scopedTasksForWarnings.filter(t => t.status === 'Awaiting Approval').length;
+  const awaitingDeletionCount = scopedTasksForWarnings.filter(t => t.status === 'Awaiting Deletion').length;
   const totalWarnings = delayedCount + awaitingApprovalCount + awaitingDeletionCount;
 
   return (

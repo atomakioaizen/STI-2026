@@ -135,7 +135,7 @@ export default function SuperAlertModal({
   };
 
   // ─── SUPERVISOR'S ACTION-REQUIRED ITEMS (Subordinates' requests) ───────────
-  const subordinateRequests = isSupervisor ? tasks.filter(t => {
+  const subordinateRequests = (isSupervisor && user.role !== 'SECRETARY') ? tasks.filter(t => {
     if (actionedTaskIds.includes(t.id)) return false;
     if (Number(t.userId) === Number(user.id)) return false;
     if (t.status === 'Completed' || t.status === 'Archived') return false;
