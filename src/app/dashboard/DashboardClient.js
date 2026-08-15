@@ -696,7 +696,7 @@ export default function DashboardClient({ user }) {
               <LayoutDashboard className="h-4 w-4" />
               My Dashboard
             </button>
-            {user.role !== 'FACULTY_STAFF' && (
+            {user.role !== 'FACULTY_STAFF' && user.role !== 'SECRETARY' && (
               <button
                 onClick={() => setActiveTab('leaderboard')}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition-all border ${
@@ -715,7 +715,7 @@ export default function DashboardClient({ user }) {
 
       {/* Main Content */}
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8 relative">
-        {activeTab === 'leaderboard' && (user.role !== 'FACULTY_STAFF' && user.role !== 'FACULTY' && user.role !== 'STAFF') ? (
+        {activeTab === 'leaderboard' && (user.role !== 'FACULTY_STAFF' && user.role !== 'FACULTY' && user.role !== 'STAFF' && user.role !== 'SECRETARY') ? (
           <div className="bg-white border border-zinc-200 rounded-2xl shadow-sm p-6">
             <Leaderboard user={user} />
           </div>

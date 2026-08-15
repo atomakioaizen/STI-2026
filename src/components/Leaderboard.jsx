@@ -181,11 +181,15 @@ export default function Leaderboard({ user }) {
   const staffSorted       = sortRankings(rawStaff).map((e, i) => ({ ...e, categoryRank: i + 1 }));
 
   // Podium sorting: Top 3 array ordered [2nd, 1st, 3rd] for classic podium display
+  // CRITICAL: Exclude 0 score performers — users with 0 points must NEVER occupy podium slots
   const getPodiumDisplay = (list) => {
     if (!list || list.length === 0) return [];
-    const first = list.find(e => e.categoryRank === 1);
-    const second = list.find(e => e.categoryRank === 2);
-    const third = list.find(e => e.categoryRank === 3);
+    const scoredList = list.filter(e => (e.totalScore || 0) > 0);
+    if (scoredList.length === 0) return [];
+
+    const first = scoredList[0];
+    const second = scoredList[1];
+    const third = scoredList[2];
     const result = [];
     if (second) result.push(second);
     if (first) result.push(first);

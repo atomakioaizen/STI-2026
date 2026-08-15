@@ -58,6 +58,7 @@ export default function SuperAlertModal({
   const [forcingTaskId, setForcingTaskId] = useState(null);
   const [forceNote, setForceNote] = useState('');
   const [submittingForce, setSubmittingForce] = useState(false);
+  const [sectorFilter, setSectorFilter] = useState('ALL'); // 'ALL' | 'ADMIN' | 'ACADEMICS'
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -182,13 +183,23 @@ export default function SuperAlertModal({
     return false;
   });
 
-  const filteredSubordinateRequests = sortTasks(
-    subordinateRequests.filter(t => !onlyActionNeeded || isActionRequired(t))
-  );
+  const filterBySector = (taskList) => {
+    if (user.role !== 'SCHOOL_ADMIN' || sectorFilter === 'ALL') return taskList;
+    return taskList.filter(t => {
+      const isAdminDept = t.user?.department?.name === 'Admin' || t.user?.position?.toLowerCase().includes('admin');
+      if (sectorFilter === 'ADMIN') return isAdminDept;
+      if (sectorFilter === 'ACADEMICS') return !isAdminDept;
+      return true;
+    });
+  };
 
-  const filteredOwnUrgentTasks = sortTasks(
+  const filteredSubordinateRequests = filterBySector(sortTasks(
+    subordinateRequests.filter(t => !onlyActionNeeded || isActionRequired(t))
+  ));
+
+  const filteredOwnUrgentTasks = filterBySector(sortTasks(
     ownUrgentTasks.filter(t => !onlyActionNeeded || isActionRequired(t))
-  );
+  ));
 
   const activeNotifications = notifications.filter(n => !actionedNotifIds.includes(n.id));
 
@@ -416,11 +427,27 @@ export default function SuperAlertModal({
             </div>
 
             {/* Filter Toggle Switch Bar */}
-            <div className="flex items-center justify-between bg-zinc-100 border border-zinc-200 rounded-xl px-3 py-1.5 mb-3 shrink-0">
-              <span className="text-[11px] font-extrabold text-zinc-700 flex items-center gap-1.5">
-                <Filter className="h-3.5 w-3.5 text-zinc-500" />
-                Filter Notices:
-              </span>
+            <div className="flex flex-wrap items-center justify-between bg-zinc-100 border border-zinc-200 rounded-xl px-3 py-2 mb-3 gap-2 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-extrabold text-zinc-700 flex items-center gap-1.5">
+                  <Filter className="h-3.5 w-3.5 text-zinc-500" />
+                  Filter Notices:
+                </span>
+                {user.role === 'SCHOOL_ADMIN' && (
+                  <div className="flex items-center gap-1.5 bg-white border border-zinc-300 rounded-lg px-2.5 py-1 shadow-2xs">
+                    <span className="text-[10px] font-black text-zinc-500 uppercase tracking-wider">Sector:</span>
+                    <select
+                      value={sectorFilter}
+                      onChange={(e) => setSectorFilter(e.target.value)}
+                      className="text-xs font-black text-zinc-900 bg-transparent border-none focus:outline-none cursor-pointer"
+                    >
+                      <option value="ALL">🏢 All Sectors</option>
+                      <option value="ADMIN">💼 Admin Sector Only</option>
+                      <option value="ACADEMICS">🎓 Academics Sector Only</option>
+                    </select>
+                  </div>
+                )}
+              </div>
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <span className={`text-[10px] font-black uppercase tracking-wider transition-colors ${onlyActionNeeded ? 'text-red-600' : 'text-zinc-500'}`}>
                   {onlyActionNeeded ? '⚡ Action Needed Only' : '📋 Show All Alerts'}
