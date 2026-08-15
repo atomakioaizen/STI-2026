@@ -37,7 +37,7 @@ export async function GET(request) {
         ];
         delete where.OR;
       }
-    } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+    } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
       // School Administrator has top authority across all accounts (himself, Principal, Program Heads, Faculty Staff)
       if (departmentId && departmentId !== 'All') {
         where.departmentId = parseInt(departmentId, 10);
@@ -96,6 +96,7 @@ export async function POST(request) {
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
       'ADMIN': 4,
+      'SECRETARY': 3.5,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
       'FACULTY': 1,

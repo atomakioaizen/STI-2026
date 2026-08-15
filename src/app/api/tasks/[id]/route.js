@@ -82,7 +82,7 @@ export async function PATCH(request, { params }) {
     let hasAccess = false;
     const currentUserId = user.userId || user.id;
 
-    if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+    if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
       hasAccess = true;
     } else if (user.role === 'PRINCIPAL') {
       // Principal has access to her own tasks OR tasks across academic departments (non-Admin)

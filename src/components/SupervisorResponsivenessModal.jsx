@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ShieldAlert, ChevronDown, ChevronUp, Clock, UserCheck, AlertCircle, Calendar } from 'lucide-react';
 import { getSupervisorInactivityList } from '@/lib/taskHelpers';
 
-export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks = [], users = [] }) {
+export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks = [], users = [], user }) {
   const [selectedMonth, setSelectedMonth] = useState('ALL');
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedSpecificDate, setSelectedSpecificDate] = useState('');
@@ -53,7 +53,18 @@ export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks =
     return true;
   });
 
-  const supervisorGroups = getSupervisorInactivityList(filteredTasks, users);
+  const allGroups = getSupervisorInactivityList(filteredTasks, users);
+  const supervisorGroups = allGroups.filter(g => {
+    if (user?.role === 'SECRETARY') {
+      return g.supervisorRole === 'SCHOOL_ADMIN' || g.supervisorRole === 'PRINCIPAL' || g.supervisorRole === 'PROGRAM_HEAD';
+    } else if (user?.role === 'SCHOOL_ADMIN') {
+      return g.supervisorRole === 'PRINCIPAL' || g.supervisorRole === 'PROGRAM_HEAD';
+    } else if (user?.role === 'PRINCIPAL') {
+      return g.supervisorRole === 'PROGRAM_HEAD';
+    }
+    return true;
+  });
+
   const totalUnactedCount = supervisorGroups.reduce((acc, g) => acc + g.unactedCount, 0);
 
   const toggleExpand = (supId) => {
@@ -72,7 +83,11 @@ export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks =
               Supervisor Responsiveness &amp; Inactivity Tracker
             </h3>
             <p className="text-xs text-zinc-500 font-semibold mt-1">
-              School Administrator Executive Overview: Inspect Program Heads and Principals with pending unacted submissions.
+              {user?.role === 'SECRETARY'
+                ? 'Secretary Monitoring View: Track pending unacted submissions for School Administrator, Principals, and Program Heads.'
+                : user?.role === 'PRINCIPAL'
+                ? 'Principal Executive View: Inspect Program Heads with pending unacted submissions.'
+                : 'School Administrator Executive View: Inspect Program Heads and Principals with pending unacted submissions.'}
             </p>
           </div>
           <button 
@@ -143,7 +158,7 @@ export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks =
             <div className="text-center py-16 text-zinc-400 bg-zinc-50 border border-zinc-200 rounded-xl">
               <UserCheck className="h-10 w-10 text-emerald-500 mx-auto mb-2" />
               <p className="font-bold text-zinc-700">100% Supervisor Responsiveness!</p>
-              <p className="text-xs text-zinc-400 mt-1">All Program Heads and Principals have acted on submissions promptly.</p>
+              <p className="text-xs text-zinc-400 mt-1">All supervisors have acted on submissions promptly.</p>
             </div>
           ) : (
             supervisorGroups.map(group => {
@@ -167,7 +182,7 @@ export default function SupervisorResponsivenessModal({ isOpen, onClose, tasks =
                         <div className="flex items-center gap-2">
                           <h4 className="font-black text-zinc-900 text-sm">{group.supervisorName}</h4>
                           <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full border border-purple-200">
-                            {group.supervisorRole === 'PRINCIPAL' ? 'Principal' : 'Program Head'}
+                            {group.supervisorRole === 'SCHOOL_ADMIN' ? 'School Administrator' : group.supervisorRole === 'PRINCIPAL' ? 'Principal' : 'Program Head'}
                           </span>
                         </div>
                         <p className="text-xs text-zinc-500 font-semibold mt-0.5">

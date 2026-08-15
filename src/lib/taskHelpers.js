@@ -178,13 +178,13 @@ export function getSupervisorInactivityList(tasks = [], users = []) {
 
   if (Array.isArray(users) && users.length > 0) {
     users.forEach(u => {
-      if (u.role === 'PROGRAM_HEAD' || u.role === 'PRINCIPAL') {
+      if (u.role === 'PROGRAM_HEAD' || u.role === 'PRINCIPAL' || u.role === 'SCHOOL_ADMIN') {
         supervisorMap.set(u.id, {
           supervisorId: u.id,
           supervisorName: u.name,
           supervisorRole: u.role,
           departmentId: u.departmentId,
-          departmentName: u.department?.name || u.position || 'Academic Department',
+          departmentName: u.department?.name || u.position || (u.role === 'SCHOOL_ADMIN' ? 'School Administration' : u.role === 'PRINCIPAL' ? 'Principal Office' : 'Academic Department'),
           tasks: []
         });
       }
@@ -207,7 +207,15 @@ export function getSupervisorInactivityList(tasks = [], users = []) {
     const ownerRole = t.user?.role || 'FACULTY_STAFF';
     let targetSupId = null;
 
-    if (ownerRole === 'PROGRAM_HEAD') {
+    if (ownerRole === 'PRINCIPAL') {
+      // Principal tasks are assigned to SCHOOL_ADMIN
+      for (const [id, sup] of supervisorMap.entries()) {
+        if (sup.supervisorRole === 'SCHOOL_ADMIN') {
+          targetSupId = id;
+          break;
+        }
+      }
+    } else if (ownerRole === 'PROGRAM_HEAD') {
       // Program Head tasks are strictly assigned to PRINCIPAL
       for (const [id, sup] of supervisorMap.entries()) {
         if (sup.supervisorRole === 'PRINCIPAL') {
@@ -216,7 +224,7 @@ export function getSupervisorInactivityList(tasks = [], users = []) {
         }
       }
     } else {
-      // Faculty/Staff tasks are strictly assigned to PROGRAM HEAD of their department
+      // Faculty/Staff tasks are strictly assigned to PROGRAM HEAD of their department (or nominated supervisor)
       for (const [id, sup] of supervisorMap.entries()) {
         if (sup.supervisorRole === 'PROGRAM_HEAD') {
           if (t.user?.departmentId && sup.departmentId === t.user.departmentId) {
@@ -231,10 +239,7 @@ export function getSupervisorInactivityList(tasks = [], users = []) {
       }
 
       if (!targetSupId && t.nominatedById && supervisorMap.has(t.nominatedById)) {
-        const nomSup = supervisorMap.get(t.nominatedById);
-        if (nomSup.supervisorRole === 'PROGRAM_HEAD') {
-          targetSupId = t.nominatedById;
-        }
+        targetSupId = t.nominatedById;
       }
 
       if (!targetSupId) {
@@ -249,7 +254,7 @@ export function getSupervisorInactivityList(tasks = [], users = []) {
 
     if (targetSupId && supervisorMap.has(targetSupId)) {
       supervisorMap.get(targetSupId).tasks.push(taskItem);
-    } else if (t.nominatedBy?.name && t.nominatedBy?.role !== 'PRINCIPAL') {
+    } else if (t.nominatedBy?.name) {
       const nomId = t.nominatedById || `nom-${t.id}`;
       if (!supervisorMap.has(nomId)) {
         supervisorMap.set(nomId, {

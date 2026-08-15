@@ -363,6 +363,7 @@ export default function DashboardClient({ user }) {
       case 'SCHOOL_ADMIN': return <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-bold text-purple-800 border border-purple-200">School Admin</span>;
       case 'PRINCIPAL':
       case 'ADMIN':        return <span className="rounded-full bg-red-100 px-3 py-1 text-xs font-bold text-red-800 border border-red-200">Principal</span>;
+      case 'SECRETARY':    return <span className="rounded-full bg-teal-100 px-3 py-1 text-xs font-bold text-teal-800 border border-teal-200">Secretary</span>;
       case 'PROGRAM_HEAD': return <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800 border border-blue-200">Program Head</span>;
       default:             return <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-bold text-green-800 border border-green-200">Faculty / Staff</span>;
     }
@@ -720,7 +721,7 @@ export default function DashboardClient({ user }) {
           </div>
         ) : (
           <>
-            {(user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'SCHOOL_ADMIN') && <AdminPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
+            {(user.role === 'ADMIN' || user.role === 'PRINCIPAL' || user.role === 'SCHOOL_ADMIN' || user.role === 'SECRETARY') && <AdminPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
             {user.role === 'PROGRAM_HEAD' && <ProgramHeadPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
             {(user.role === 'FACULTY_STAFF' || user.role === 'FACULTY' || user.role === 'STAFF') && <FacultyPortal user={user} taskTrigger={taskTrigger} setTaskTrigger={setTaskTrigger} notifications={notifications} onDeleteNotification={handleAcknowledgeNotification} refreshDashboard={refreshDashboard} />}
           </>

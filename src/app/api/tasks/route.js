@@ -98,8 +98,8 @@ export async function GET(request) {
           }
         }
       ];
-    } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
-      // School Administrator has full visibility across all departments
+    } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
+      // School Administrator and Secretary have full visibility across all departments
       // No baseline filters applied
     }
 
@@ -122,7 +122,7 @@ export async function GET(request) {
             id: -1 // Matches nothing
           };
         }
-      } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+      } else if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
         where.user = {
           departmentId: parsedDeptId
         };
@@ -134,7 +134,7 @@ export async function GET(request) {
       const parsedUserId = parseInt(userIdQuery, 10);
       const currentUserId = user.userId || user.id;
       
-      if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
+      if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
         where.userId = parsedUserId;
       } else if (user.role === 'PRINCIPAL') {
         // Principal can filter users that do not belong to Admin department OR herself
@@ -393,7 +393,7 @@ export async function POST(request) {
 
     // Filter target users based on authority limits
     const validTargetUsers = targetUsers.filter(targetUser => {
-      if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') return true;
+      if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') return true;
       if (user.role === 'PRINCIPAL') {
         return Number(targetUser.id) === currentUserId || targetUser.department?.name !== 'Admin';
       }

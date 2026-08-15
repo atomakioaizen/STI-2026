@@ -25,6 +25,7 @@ export async function PATCH(request, { params }) {
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
       'ADMIN': 4,
+      'SECRETARY': 3.5,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
       'FACULTY': 1,
@@ -150,6 +151,7 @@ export async function DELETE(request, { params }) {
     const ROLE_LEVELS = {
       'SCHOOL_ADMIN': 4,
       'ADMIN': 4,
+      'SECRETARY': 3.5,
       'PRINCIPAL': 3,
       'PROGRAM_HEAD': 2,
       'FACULTY': 1,

@@ -68,18 +68,19 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     return path.split('.').reduce((acc, part) => acc && acc[part], obj);
   };
 
-  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, ADMIN: 4, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY: 1, STAFF: 1, FACULTY_STAFF: 1 };
+  const ROLE_LEVELS = { SCHOOL_ADMIN: 4, ADMIN: 4, SECRETARY: 3.5, PRINCIPAL: 3, PROGRAM_HEAD: 2, FACULTY: 1, STAFF: 1, FACULTY_STAFF: 1 };
   const userLevel = ROLE_LEVELS[user.role] || 0;
   const availableRoles = [
     { value: 'FACULTY', label: 'Faculty (Academic)', level: 1 },
     { value: 'STAFF', label: 'Administrative Staff', level: 1 },
     { value: 'PROGRAM_HEAD', label: 'Program Head', level: 2 },
     { value: 'PRINCIPAL', label: 'Principal', level: 3 },
+    { value: 'SECRETARY', label: 'Secretary / Executive Assistant', level: 3.5 },
     { value: 'SCHOOL_ADMIN', label: 'School Admin', level: 4 }
   ].filter(r => {
     if (r.level >= userLevel) return false;
-    // Principal level account cannot create or manage Administrative Staff
-    if (user.role === 'PRINCIPAL' && r.value === 'STAFF') return false;
+    // Principal level account cannot create or manage Administrative Staff or Secretary
+    if (user.role === 'PRINCIPAL' && (r.value === 'STAFF' || r.value === 'SECRETARY')) return false;
     return true;
   });
 
@@ -1050,8 +1051,8 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
           </span>
         </button>
 
-        {/* Card 7: Supervisor Responsiveness Tracker (Stat Card #2 - SCHOOL_ADMIN ONLY) */}
-        {user.role === 'SCHOOL_ADMIN' && (
+        {/* Card 7: Supervisor Responsiveness Tracker (SCHOOL_ADMIN & SECRETARY) */}
+        {(user.role === 'SCHOOL_ADMIN' || user.role === 'SECRETARY') && (
           <button
             onClick={() => setActiveModal('supervisor_responsiveness')}
             className="bg-white hover:bg-zinc-50 border border-purple-200 hover:border-purple-400 rounded-2xl p-6 text-left shadow-sm transition group border-2 border-dashed"
@@ -2083,12 +2084,13 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         onRefresh={fetchTasks}
       />
 
-      {/* Supervisor Responsiveness Tracker Modal (Stat Card #2 - SCHOOL_ADMIN ONLY) */}
+      {/* Supervisor Responsiveness Tracker Modal */}
       <SupervisorResponsivenessModal
         isOpen={activeModal === 'supervisor_responsiveness'}
         onClose={() => setActiveModal(null)}
         tasks={tasks}
         users={users}
+        user={user}
       />
 
       {/* Nominate / Assign task modal */}
