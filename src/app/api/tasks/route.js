@@ -395,7 +395,7 @@ export async function POST(request) {
     const validTargetUsers = targetUsers.filter(targetUser => {
       if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') return true;
       if (user.role === 'PRINCIPAL') {
-        return Number(targetUser.id) === currentUserId || targetUser.department?.name !== 'Admin';
+        return true;
       }
       if (user.role === 'PROGRAM_HEAD') {
         return Number(targetUser.id) === currentUserId || targetUser.departmentId === user.departmentId;
@@ -454,6 +454,21 @@ export async function POST(request) {
 
       const isArchived = (status === 'Completed');
       let finalRemarks = remarks ? remarks.trim() : '';
+
+      if (user.role === 'PRINCIPAL' && targetUser.department?.name === 'Admin' && !isSelfAssignment) {
+        const nomMsg = `Principal ${user.name} nominated this task for Admin Staff (${targetUser.name}). Awaiting School Administrator approval.`;
+        let messages = [];
+        if (finalRemarks) {
+          try {
+            messages = JSON.parse(finalRemarks);
+            if (!Array.isArray(messages)) messages = [{ sender: user.name, role: user.role, message: finalRemarks, timestamp: new Date().toISOString() }];
+          } catch(e) {
+            messages = [{ sender: user.name, role: user.role, message: finalRemarks, timestamp: new Date().toISOString() }];
+          }
+        }
+        messages.push({ sender: 'System', role: 'SYSTEM', message: nomMsg, timestamp: new Date().toISOString() });
+        finalRemarks = JSON.stringify(messages);
+      }
 
       // If team deliverable (multiple assignees), append co-assignees log
       if (validTargetUsers.length > 1) {

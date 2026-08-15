@@ -395,6 +395,21 @@ export async function PATCH(request, { params }) {
             } else if (task.status === 'Awaiting Deletion') {
               currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor ${user.name} rejected deletion request. Task returned to Ongoing.`);
             }
+          } else if (updates.status === 'Pending Acceptance') {
+            data.status = 'Pending Acceptance';
+            data.rejectionReason = null;
+            currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `School Administrator ${user.name} approved Principal nomination request. Task delivered to assignee as Pending Acceptance.`);
+            await prisma.activityLog.create({
+              data: {
+                userId: task.userId,
+                action: 'TASK_NOMINATED',
+                details: JSON.stringify({
+                  taskId: task.id,
+                  taskDescription: task.taskDescription,
+                  supervisorName: user.name
+                })
+              }
+            });
           } else if (updates.status === 'Not Started') {
             data.progress = 0;
             data.rejectionReason = null;

@@ -766,14 +766,17 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         const data = await taskRes.json();
         const task = data.tasks.find(t => t.id === taskId);
         if (task) {
+          const isPrincipalAdminNomination = (task.nominatedBy?.role === 'PRINCIPAL' || task.nominatedBy?.position?.toLowerCase().includes('principal')) && (task.user?.department?.name === 'Admin' || task.user?.position?.toLowerCase().includes('admin')) && task.status === 'Awaiting Approval';
+          const nextStatus = isPrincipalAdminNomination ? 'Pending Acceptance' : (task.progress === 100 ? 'Completed' : 'Ongoing');
+
           const res = await fetch(`/api/tasks/${taskId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: task.progress === 100 ? 'Completed' : 'Ongoing' })
+            body: JSON.stringify({ status: nextStatus })
           });
           if (res.ok) {
             fetchTasks();
-            triggerAlert('Update Approved', 'Progress update approved.');
+            triggerAlert('Approved', isPrincipalAdminNomination ? 'Principal nomination approved and sent to Admin Staff as Pending Acceptance.' : 'Progress update approved.');
           }
         }
       }

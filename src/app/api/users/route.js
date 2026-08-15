@@ -21,12 +21,11 @@ export async function GET(request) {
         { id: user.userId }
       ];
     } else if (user.role === 'PRINCIPAL') {
-      // Principal sees herself (for self-nomination) + all academic personnel, but CANNOT view or assign to School Admin or Admin department
+      // Principal sees herself (for self-nomination) + all personnel excluding SCHOOL_ADMIN and ADMIN top accounts
       where.OR = [
         { id: user.userId },
         {
-          role: { notIn: ['SCHOOL_ADMIN', 'ADMIN'] },
-          department: { name: { not: 'Admin' } }
+          role: { notIn: ['SCHOOL_ADMIN', 'ADMIN'] }
         }
       ];
       if (departmentId && departmentId !== 'All') {

@@ -500,12 +500,19 @@ export default function SuperAlertModal({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex justify-between items-start gap-2">
-                                  <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${categoryColor}`}>
-                                    {t.category || 'Deliverable'}
-                                  </span>
-                                  <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${getBadgeStyle(t)}`}>
-                                    {getRequestLabel(t)}
-                                  </span>
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${categoryColor}`}>
+                                      {t.category || 'Deliverable'}
+                                    </span>
+                                    {((t.nominatedBy?.role === 'PRINCIPAL' || t.nominatedBy?.position?.toLowerCase().includes('principal')) && (t.user?.department?.name === 'Admin' || t.user?.position?.toLowerCase().includes('admin'))) && (
+                                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.2 rounded font-black text-[9px] uppercase tracking-wider">
+                                        🏛️ From Academics / Principal
+                                      </span>
+                                    )}
+                                    <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${getBadgeStyle(t)}`}>
+                                      {getRequestLabel(t)}
+                                    </span>
+                                  </div>
                                 </div>
                                 <p className="font-bold text-zinc-950 text-xs mt-0.5 line-clamp-2">{t.taskDescription}</p>
                                 <div className="flex flex-col gap-1 mt-1 text-[9px] text-zinc-600 font-bold border-t border-zinc-200/50 pt-1.5">
@@ -1245,7 +1252,14 @@ export default function SuperAlertModal({
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">Nominated By</p>
-                  <p className="font-extrabold text-zinc-900 mt-0.5">{viewingDetailTask.nominatedBy?.name || 'Self-Nominated'}</p>
+                  <p className="font-extrabold text-zinc-900 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                    {viewingDetailTask.nominatedBy?.name || 'Self-Nominated'}
+                    {((viewingDetailTask.nominatedBy?.role === 'PRINCIPAL' || viewingDetailTask.nominatedBy?.position?.toLowerCase().includes('principal')) && (viewingDetailTask.user?.department?.name === 'Admin' || viewingDetailTask.user?.position?.toLowerCase().includes('admin'))) && (
+                      <span className="bg-amber-100 text-amber-900 border border-amber-300 px-1.5 py-0.5 rounded font-black text-[9px] uppercase">
+                        🏛️ From Academics / Principal
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">📅 Date Created / Nominated</p>

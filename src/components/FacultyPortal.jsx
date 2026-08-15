@@ -971,6 +971,11 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
                               </div>
                                 {/* Actor Labels */}
                                 <div className="flex flex-wrap items-center gap-1 mt-1 text-[9px] leading-tight">
+                                  {((task.nominatedBy?.role === 'PRINCIPAL' || task.nominatedBy?.position?.toLowerCase().includes('principal')) && (user.department?.name === 'Admin' || user.position?.toLowerCase().includes('admin'))) && (
+                                    <span className="bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded font-black inline-flex items-center gap-1">
+                                      🏛️ From Academics / Principal ({task.nominatedBy?.name})
+                                    </span>
+                                  )}
                                   {task.nominatedBy?.name ? (
                                     <span className="bg-blue-50/80 text-blue-700 border border-blue-200/60 px-1.5 py-0.5 rounded font-medium inline-flex items-center gap-0.5">
                                       👤 Nominated: {task.nominatedBy.name}
