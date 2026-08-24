@@ -13,6 +13,7 @@ import DelayEscalationModal from './DelayEscalationModal';
 import SupervisorResponsivenessModal from './SupervisorResponsivenessModal';
 import DelayBlockAlertModal from './DelayBlockAlertModal';
 import AssigneeCombobox from './AssigneeCombobox';
+import CategorySelect from './CategorySelect';
 import { exportTasksToExcel } from '@/lib/reports';
 import { generateProfessionalExcelReport } from '@/lib/excelReport';
 import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays, getSupervisorInactivityList } from '@/lib/taskHelpers';
@@ -2140,13 +2141,9 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
                 <div>
                   <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1.5">Category</label>
-                  <input
-                    type="text"
+                  <CategorySelect
                     value={taskCategory}
-                    onChange={(e) => setTaskCategory(e.target.value)}
-                    placeholder="e.g. Syllabus Submission, Final Grades, Report"
-                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-2.5 px-3 text-xs focus:bg-white focus:outline-none"
-                    required
+                    onChange={setTaskCategory}
                   />
                 </div>
 
