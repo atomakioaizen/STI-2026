@@ -623,7 +623,16 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         triggerAlert('Task Updated', 'Task progress updated successfully.');
       } else {
         const data = await res.json();
-        triggerAlert('Error', data.error || 'Failed to update task.');
+        if (data.code === 'DELAY_NOTICE_REQUIRED' || data.code === 'USER_REPLY_REQUIRED') {
+          setDelayBlockInfo({
+            isOpen: true,
+            code: data.code,
+            delayDays: data.delayDays,
+            message: data.message
+          });
+        } else {
+          triggerAlert('Error', data.message || data.error || 'Failed to update task.');
+        }
       }
     } catch (err) {
       console.error('Error reviewing task', err);
