@@ -6,7 +6,7 @@ import {
   AlertTriangle, Clock, Calendar, Inbox, Check, X, 
   ArrowUpRight, Ban, Trash2, Send, MessageSquare, Filter 
 } from 'lucide-react';
-import { getTaskActorInfo, getPendingElapsedInfo } from '@/lib/taskHelpers';
+import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays } from '@/lib/taskHelpers';
 
 export default function SuperAlertModal({ 
   tasks, 
