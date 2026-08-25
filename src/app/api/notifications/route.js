@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 
-// Cache bust comment to trigger re-compile.
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 
 export async function GET(request) {
   try {

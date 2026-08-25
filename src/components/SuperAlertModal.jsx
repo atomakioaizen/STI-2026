@@ -301,7 +301,7 @@ export default function SuperAlertModal({
     setSubmittingReject(true);
     showToast('✓ Request rejected & returned.');
     try {
-      const task = tasks.find(t => t.id === taskId);
+      const task = tasks.find(t => Number(t.id) === Number(taskId));
       if (task && task.status === 'Awaiting Deletion') {
         if (onRejectDelete) {
           await onRejectDelete(taskId, rejectionReason.trim());

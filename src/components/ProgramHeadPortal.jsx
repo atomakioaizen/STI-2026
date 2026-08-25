@@ -195,11 +195,12 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
     try {
       const url = new URL('/api/tasks', window.location.origin);
       url.searchParams.append('archived', 'false');
+      url.searchParams.append('_t', Date.now().toString());
       if (statusFilter !== 'All') url.searchParams.append('status', statusFilter);
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
       if (timeframeFilter !== 'All') url.searchParams.append('timeframe', timeframeFilter);
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks);
@@ -325,8 +326,8 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
   // Approve update request (Awaiting Approval) from subordinate
   const handleAcceptUpdate = async (taskId) => {
     try {
-      const task = tasks.find(t => t.id === taskId);
-      const status = task?.progress === 100 ? 'Completed' : 'Ongoing';
+      const task = tasks.find(t => Number(t.id) === Number(taskId));
+      const status = (task?.progress === 100 || !task) ? 'Completed' : 'Ongoing';
       const res = await fetch(`/api/tasks/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -825,17 +826,18 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
   };
 
   // Split tasks (Active, uncompleted only)
-  const facultyTasks = tasks.filter(t => t.userId !== user.id && !t.archived && t.status !== 'Completed');
-  const myTasks = tasks.filter(t => t.userId === user.id && !t.archived && t.status !== 'Completed');
+  const userIdNum = Number(user.id || user.userId);
+  const facultyTasks = tasks.filter(t => Number(t.userId) !== userIdNum && !t.archived && t.status !== 'Completed');
+  const myTasks = tasks.filter(t => Number(t.userId) === userIdNum && !t.archived && t.status !== 'Completed');
 
   // Metrics
   const totalTasks = tasks.length;
   const delayedTasks = tasks.filter(t => t.status === 'Delayed').length;
-  const pendingApprovals = tasks.filter(t => t.status === 'Awaiting Approval' && t.userId !== user.id).length;
-  const pendingDeletions = tasks.filter(t => t.status === 'Awaiting Deletion' && t.userId !== user.id).length;
-  const rejectedNominations = tasks.filter(t => t.status === 'Rejected' && t.nominatedById === user.id);
-  const pendingAcceptance = tasks.filter(t => t.status === 'Pending Acceptance' && t.nominatedById === user.id);
-  const myPendingAcceptances = tasks.filter(t => t.status === 'Pending Acceptance' && t.userId === user.id);
+  const pendingApprovals = tasks.filter(t => t.status === 'Awaiting Approval' && Number(t.userId) !== userIdNum).length;
+  const pendingDeletions = tasks.filter(t => t.status === 'Awaiting Deletion' && Number(t.userId) !== userIdNum).length;
+  const rejectedNominations = tasks.filter(t => t.status === 'Rejected' && Number(t.nominatedById) === userIdNum);
+  const pendingAcceptance = tasks.filter(t => t.status === 'Pending Acceptance' && Number(t.nominatedById) === userIdNum);
+  const myPendingAcceptances = tasks.filter(t => t.status === 'Pending Acceptance' && Number(t.userId) === userIdNum);
   const convoTasks = tasks.filter(t => 
     t.status === 'Rejected' || 
     t.rejectionReason || 

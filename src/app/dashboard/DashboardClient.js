@@ -94,7 +94,7 @@ export default function DashboardClient({ user }) {
 
   const fetchNotifications = async () => {
     try {
-      const res = await fetch('/api/notifications');
+      const res = await fetch(`/api/notifications?_t=${Date.now()}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
       if (res.ok) {
         const data = await res.json();
         setNotifications(data.notifications || []);
@@ -119,7 +119,7 @@ export default function DashboardClient({ user }) {
 
   const getTasks = async () => {
     try {
-      const res = await fetch('/api/tasks?archived=false');
+      const res = await fetch(`/api/tasks?archived=false&_t=${Date.now()}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks || []);

@@ -3,6 +3,10 @@ import { prisma } from '@/lib/db';
 import { getSessionUser } from '@/lib/auth';
 import { getTaskDelayDays } from '@/lib/taskHelpers';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
+
 function appendMessage(existingRemarks, senderName, senderRole, text) {
   let messages = [];
   if (existingRemarks) {
@@ -278,7 +282,7 @@ export async function PATCH(request, { params }) {
           if (updates.progress !== undefined) {
             data.progress = parseInt(updates.progress, 10);
           } else {
-            data.progress = 100;
+            data.progress = task.progress;
           }
         }
       }
@@ -352,8 +356,9 @@ export async function PATCH(request, { params }) {
             currentRemarks = appendMessage(currentRemarks, 'System', 'SYSTEM', `Supervisor rejected deletion request. Remarks: "${reason.trim()}"`);
           }
         } else {
-          data.status = updates.status;
-          if (updates.status === 'Completed') {
+          const isCompleting = updates.status === 'Completed' || (updates.status === 'Ongoing' && task.status === 'Awaiting Approval' && task.progress === 100);
+          data.status = isCompleting ? 'Completed' : updates.status;
+          if (isCompleting) {
             data.progress = 100;
             data.archived = true;
             data.previousProgress = null;

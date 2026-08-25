@@ -120,10 +120,11 @@ export default function FacultyPortal({ user, taskTrigger, setTaskTrigger, notif
     try {
       const url = new URL('/api/tasks', window.location.origin);
       url.searchParams.append('archived', 'false');
+      url.searchParams.append('_t', Date.now().toString());
       if (statusFilter !== 'All') url.searchParams.append('status', statusFilter);
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks);

@@ -206,12 +206,13 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     try {
       const url = new URL('/api/tasks', window.location.origin);
       url.searchParams.append('archived', 'false');
+      url.searchParams.append('_t', Date.now().toString());
       if (statusFilter !== 'All') url.searchParams.append('status', statusFilter);
       if (priorityFilter !== 'All') url.searchParams.append('priority', priorityFilter);
       if (timeframeFilter !== 'All') url.searchParams.append('timeframe', timeframeFilter);
       if (deptFilter !== 'All') url.searchParams.append('departmentId', deptFilter);
       
-      const res = await fetch(url.toString());
+      const res = await fetch(url.toString(), { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } });
       if (res.ok) {
         const data = await res.json();
         setTasks(data.tasks);
@@ -762,23 +763,26 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
 
   const handleApproveUpdate = async (taskId) => {
     try {
-      const taskRes = await fetch(`/api/tasks`);
-      if (taskRes.ok) {
-        const data = await taskRes.json();
-        const task = data.tasks.find(t => t.id === taskId);
-        if (task) {
-          const isPrincipalAdminNomination = (task.nominatedBy?.role === 'PRINCIPAL' || task.nominatedBy?.position?.toLowerCase().includes('principal')) && (task.user?.department?.name === 'Admin' || task.user?.position?.toLowerCase().includes('admin')) && task.status === 'Awaiting Approval';
-          const nextStatus = isPrincipalAdminNomination ? 'Pending Acceptance' : (task.progress === 100 ? 'Completed' : 'Ongoing');
+      let task = tasks.find(t => Number(t.id) === Number(taskId));
+      if (!task) {
+        const taskRes = await fetch(`/api/tasks?_t=${Date.now()}`, { cache: 'no-store' });
+        if (taskRes.ok) {
+          const data = await taskRes.json();
+          task = data.tasks?.find(t => Number(t.id) === Number(taskId));
+        }
+      }
+      if (task) {
+        const isPrincipalAdminNomination = (task.nominatedBy?.role === 'PRINCIPAL' || task.nominatedBy?.position?.toLowerCase().includes('principal')) && (task.user?.department?.name === 'Admin' || task.user?.position?.toLowerCase().includes('admin')) && task.status === 'Awaiting Approval';
+        const nextStatus = isPrincipalAdminNomination ? 'Pending Acceptance' : (task.progress === 100 ? 'Completed' : 'Ongoing');
 
-          const res = await fetch(`/api/tasks/${taskId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: nextStatus })
-          });
-          if (res.ok) {
-            fetchTasks();
-            triggerAlert('Approved', isPrincipalAdminNomination ? 'Principal nomination approved and sent to Admin Staff as Pending Acceptance.' : 'Progress update approved.');
-          }
+        const res = await fetch(`/api/tasks/${taskId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: nextStatus })
+        });
+        if (res.ok) {
+          fetchTasks();
+          triggerAlert('Approved', isPrincipalAdminNomination ? 'Principal nomination approved and sent to Admin Staff as Pending Acceptance.' : 'Progress update approved.');
         }
       }
     } catch (err) {
@@ -814,7 +818,7 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
     }
   };
 
-  const scopedTasksForWarnings = user.role === 'SECRETARY' ? tasks.filter(t => Number(t.userId) === Number(user.id)) : tasks;
+  const scopedTasksForWarnings = user.role === 'SECRETARY' ? tasks.filter(t => Number(t.userId) === Number(user.id || user.userId)) : tasks;
   const delayedCount = scopedTasksForWarnings.filter(t => t.status === 'Delayed').length;
   const awaitingApprovalCount = scopedTasksForWarnings.filter(t => t.status === 'Awaiting Approval').length;
   const awaitingDeletionCount = scopedTasksForWarnings.filter(t => t.status === 'Awaiting Deletion').length;
