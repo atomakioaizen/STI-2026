@@ -31,10 +31,12 @@ export async function getSessionUser() {
     if (!token) return null;
     const decoded = verifyToken(token);
     if (!decoded) return null;
+    const numId = parseInt(decoded.userId || decoded.id, 10);
+    if (isNaN(numId)) return null;
     return {
       ...decoded,
-      id: decoded.id || decoded.userId,
-      userId: decoded.userId || decoded.id
+      id: numId,
+      userId: numId
     };
   } catch (e) {
     return null;

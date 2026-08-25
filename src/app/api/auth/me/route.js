@@ -26,9 +26,19 @@ export async function GET() {
       return res;
     }
 
+    const numUserId = parseInt(decoded.userId || decoded.id, 10);
+    if (isNaN(numUserId)) {
+      const res = NextResponse.json(
+        { error: 'Invalid session user ID' },
+        { status: 401 }
+      );
+      res.cookies.set('auth_token', '', { maxAge: 0, path: '/' });
+      return res;
+    }
+
     // Verify user still exists in DB (handles DB wipes / account deletion)
     const user = await prisma.user.findUnique({
-      where: { id: decoded.userId },
+      where: { id: numUserId },
       select: { id: true }
     });
 

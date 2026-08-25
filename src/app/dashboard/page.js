@@ -20,8 +20,9 @@ export default async function DashboardPage() {
     redirect('/');
   }
 
-  const userId = decodedUser.userId || decodedUser.id;
-  if (!userId) {
+  const rawUserId = decodedUser.userId || decodedUser.id;
+  const userId = parseInt(rawUserId, 10);
+  if (isNaN(userId) || !userId) {
     redirect('/');
   }
 
