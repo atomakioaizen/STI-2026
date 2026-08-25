@@ -4,6 +4,9 @@ import { verifyToken } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import DashboardClient from './DashboardClient';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function DashboardPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get('auth_token')?.value;
@@ -14,13 +17,11 @@ export default async function DashboardPage() {
 
   const decodedUser = verifyToken(token);
   if (!decodedUser) {
-    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
     redirect('/');
   }
 
   const userId = decodedUser.userId || decodedUser.id;
   if (!userId) {
-    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
     redirect('/');
   }
 
@@ -40,7 +41,6 @@ export default async function DashboardPage() {
   }
 
   if (!user) {
-    cookieStore.set('auth_token', '', { maxAge: 0, path: '/' });
     redirect('/');
   }
 
