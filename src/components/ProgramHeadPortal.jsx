@@ -338,8 +338,16 @@ export default function ProgramHeadPortal({ user, taskTrigger, setTaskTrigger, n
         fetchTasks();
         fetchArchivedTasks();
         triggerAlert('Approved', status === 'Completed' ? 'Task marked as Completed and archived.' : 'Progress update approved.');
+        return true;
+      } else {
+        const errorData = await res.json();
+        triggerAlert('Approval Blocked by Delay Monitoring System', errorData.message || errorData.error || 'Failed to approve task.');
+        return false;
       }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
   };
 
   // Reject update request — revert to Ongoing

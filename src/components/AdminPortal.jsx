@@ -783,10 +783,16 @@ export default function AdminPortal({ user, taskTrigger, setTaskTrigger, notific
         if (res.ok) {
           fetchTasks();
           triggerAlert('Approved', isPrincipalAdminNomination ? 'Principal nomination approved and sent to Admin Staff as Pending Acceptance.' : 'Progress update approved.');
+          return true;
+        } else {
+          const errorData = await res.json();
+          triggerAlert('Approval Blocked by Delay Monitoring System', errorData.message || errorData.error || 'Failed to approve task.');
+          return false;
         }
       }
     } catch (err) {
       console.error(err);
+      return false;
     }
   };
 

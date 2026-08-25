@@ -540,6 +540,11 @@ export default function SuperAlertModal({
                                     <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${getBadgeStyle(t)}`}>
                                       {getRequestLabel(t)}
                                     </span>
+                                    {getTaskDelayDays(t) >= 3 && (
+                                      <span className="bg-red-100 text-red-950 border border-red-300 px-1.5 py-0.2 rounded font-black text-[9px] uppercase tracking-wider flex items-center gap-1">
+                                        ⚠️ Held by Delay Monitoring ({getTaskDelayDays(t)}d Delay - Justification/NTE Required)
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                                 <p className="font-bold text-zinc-950 text-xs mt-0.5 line-clamp-2">{t.taskDescription}</p>
@@ -629,13 +634,16 @@ export default function SuperAlertModal({
                                       onClick={async (e) => { 
                                         e.stopPropagation(); 
                                         setProcessingTaskId(t.id);
-                                        setActionedTaskIds(prev => [...prev, t.id]);
-                                        showToast('✓ Progress Approved!');
                                         try {
+                                          let success = false;
                                           if (onAcceptDelete) {
-                                            await onAcceptDelete(t.id, false);
+                                            success = await onAcceptDelete(t.id, false);
                                           } else if (onAcceptTask) {
-                                            await onAcceptTask(t.id);
+                                            success = await onAcceptTask(t.id);
+                                          }
+                                          if (success !== false) {
+                                            setActionedTaskIds(prev => [...prev, t.id]);
+                                            showToast('✓ Progress Approved!');
                                           }
                                         } catch (err) { console.error(err); }
                                         finally {
