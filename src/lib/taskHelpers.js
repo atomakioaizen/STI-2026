@@ -122,8 +122,16 @@ export function getPendingElapsedInfo(task) {
   };
 }
 
+export function isSystemCleanupImmune(task) {
+  if (!task || !task.remarks) return false;
+  const str = typeof task.remarks === 'string' ? task.remarks : JSON.stringify(task.remarks);
+  return str.includes('(approved by the system for system cleanup)') || 
+         str.includes('(forwarded by system cleanup)');
+}
+
 export function getTaskDelayDays(task) {
   if (!task || task.status === 'Completed' || task.archived) return 0;
+  if (isSystemCleanupImmune(task)) return 0;
   const now = new Date();
   let delayDays = 0;
 

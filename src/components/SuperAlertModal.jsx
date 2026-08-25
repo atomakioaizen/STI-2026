@@ -6,7 +6,7 @@ import {
   AlertTriangle, Clock, Calendar, Inbox, Check, X, 
   ArrowUpRight, Ban, Trash2, Send, MessageSquare, Filter 
 } from 'lucide-react';
-import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays } from '@/lib/taskHelpers';
+import { getTaskActorInfo, getPendingElapsedInfo, getTaskDelayDays, isSystemCleanupImmune } from '@/lib/taskHelpers';
 
 export default function SuperAlertModal({ 
   tasks, 
@@ -544,11 +544,15 @@ export default function SuperAlertModal({
                                     <span className={`px-1.5 py-0.2 border rounded text-[9px] font-bold uppercase tracking-wider ${getBadgeStyle(t)}`}>
                                       {getRequestLabel(t)}
                                     </span>
-                                    {getTaskDelayDays(t) >= 3 && (
+                                    {isSystemCleanupImmune(t) ? (
+                                      <span className="bg-blue-100 text-blue-950 border border-blue-300 px-1.5 py-0.2 rounded font-black text-[9px] uppercase tracking-wider flex items-center gap-1">
+                                        🛡️ System Forwarded (System Cleanup Immunity) — Action Required to Complete
+                                      </span>
+                                    ) : getTaskDelayDays(t) >= 3 ? (
                                       <span className="bg-red-100 text-red-950 border border-red-300 px-1.5 py-0.2 rounded font-black text-[9px] uppercase tracking-wider flex items-center gap-1">
                                         ⚠️ Held by Delay Monitoring ({getTaskDelayDays(t)}d Delay - Justification/NTE Required)
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </div>
                                 <p className="font-bold text-zinc-950 text-xs mt-0.5 line-clamp-2">{t.taskDescription}</p>
