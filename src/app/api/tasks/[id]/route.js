@@ -454,7 +454,58 @@ export async function PATCH(request, { params }) {
     }
 
     if (userRemarks !== undefined && userRemarks.trim() !== '') {
-      currentRemarks = appendMessage(currentRemarks, user.name, user.role, userRemarks.trim());
+      const trimmedRemarks = userRemarks.trim();
+      currentRemarks = appendMessage(currentRemarks, user.name, user.role, trimmedRemarks);
+
+      // Dual System Notifications for NTE / Justifications & Replies
+      try {
+        if (trimmedRemarks.includes('[ADMIN_ESCALATION]') || trimmedRemarks.includes('[ADMIN_NOTICE]')) {
+          // Identify Supervisor for this task
+          let targetSupervisorId = task.nominatedById;
+          if (!targetSupervisorId && task.user?.departmentId) {
+            const ph = await prisma.user.findFirst({
+              where: { departmentId: task.user.departmentId, role: { in: ['PROGRAM_HEAD', 'PRINCIPAL'] } }
+            });
+            if (ph) targetSupervisorId = ph.id;
+          }
+
+          const recipientId = targetSupervisorId || task.userId;
+          await prisma.activityLog.create({
+            data: {
+              userId: recipientId,
+              action: trimmedRemarks.includes('[ADMIN_ESCALATION]') ? 'NTE_ISSUED' : 'JUSTIFICATION_ISSUED',
+              details: JSON.stringify({
+                taskId: task.id,
+                taskDescription: task.taskDescription,
+                issuedBy: user.name,
+                message: trimmedRemarks
+              })
+            }
+          });
+        } else if (trimmedRemarks.includes('[USER_REPLY]') || trimmedRemarks.includes('[STAFF_REPLY]') || trimmedRemarks.includes('[SUPERVISOR_REPLY]')) {
+          // Notify School Administrators
+          const admins = await prisma.user.findMany({
+            where: { role: 'SCHOOL_ADMIN' },
+            select: { id: true }
+          });
+          for (const admin of admins) {
+            await prisma.activityLog.create({
+              data: {
+                userId: admin.id,
+                action: 'SUPERVISOR_REPLY_SUBMITTED',
+                details: JSON.stringify({
+                  taskId: task.id,
+                  taskDescription: task.taskDescription,
+                  repliedBy: user.name,
+                  message: trimmedRemarks
+                })
+              }
+            });
+          }
+        }
+      } catch (notifErr) {
+        console.error('Notification creation error:', notifErr);
+      }
     }
 
     data.remarks = currentRemarks;

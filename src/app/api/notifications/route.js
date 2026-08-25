@@ -16,7 +16,7 @@ export async function GET(request) {
     const notifications = await prisma.activityLog.findMany({
       where: {
         userId: user.userId,
-        action: { in: ['REJECTED_DELETED', 'TASK_RESTORED', 'TASK_ACCEPTED', 'TASK_REJECTED', 'TASK_APPROVED', 'PROGRESS_REJECTED'] }
+        action: { in: ['REJECTED_DELETED', 'TASK_RESTORED', 'TASK_ACCEPTED', 'TASK_REJECTED', 'TASK_APPROVED', 'PROGRESS_REJECTED', 'NTE_ISSUED', 'SUPERVISOR_REPLY_SUBMITTED', 'JUSTIFICATION_ISSUED'] }
       },
       orderBy: {
         createdAt: 'desc'
@@ -57,7 +57,7 @@ export async function DELETE(request) {
       where: {
         id: logId,
         userId: user.userId,
-        action: { in: ['REJECTED_DELETED', 'TASK_RESTORED', 'TASK_ACCEPTED', 'TASK_REJECTED', 'TASK_APPROVED', 'PROGRESS_REJECTED'] }
+        action: { in: ['REJECTED_DELETED', 'TASK_RESTORED', 'TASK_ACCEPTED', 'TASK_REJECTED', 'TASK_APPROVED', 'PROGRESS_REJECTED', 'NTE_ISSUED', 'SUPERVISOR_REPLY_SUBMITTED', 'JUSTIFICATION_ISSUED'] }
       }
     });
 
