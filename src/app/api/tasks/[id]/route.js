@@ -83,8 +83,7 @@ export async function PATCH(request, { params }) {
     }
 
     // Baseline Access Control Checks
-    let hasAccess = false;
-    const currentUserId = user.userId || user.id;
+    const currentUserId = Number(user.id || user.userId);
 
     if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN' || user.role === 'SECRETARY') {
       hasAccess = true;
@@ -92,17 +91,17 @@ export async function PATCH(request, { params }) {
       // Principal has access to her own tasks OR tasks across academic departments (non-Admin)
       const targetUser = task.user;
       const ownerDept = targetUser.departmentId ? await prisma.department.findUnique({ where: { id: targetUser.departmentId } }) : null;
-      if (Number(task.userId) === Number(currentUserId) || (targetUser && ownerDept?.name !== 'Admin')) {
+      if (Number(task.userId) === currentUserId || (targetUser && ownerDept?.name !== 'Admin')) {
         hasAccess = true;
       }
     } else if (user.role === 'PROGRAM_HEAD') {
       // Program Heads have access to tasks of Faculty (FACULTY_STAFF) in their department, OR their own tasks
-      if (Number(task.userId) === Number(currentUserId) || (task.user.departmentId === user.departmentId && task.user.role === 'FACULTY_STAFF')) {
+      if (Number(task.userId) === currentUserId || (task.user.departmentId === user.departmentId && (task.user.role === 'FACULTY_STAFF' || task.user.role === 'FACULTY' || task.user.role === 'STAFF'))) {
         hasAccess = true;
       }
-    } else if (user.role === 'FACULTY_STAFF') {
+    } else if (user.role === 'FACULTY_STAFF' || user.role === 'FACULTY' || user.role === 'STAFF') {
       // Faculty/Staff can only access their own tasks
-      if (Number(task.userId) === Number(currentUserId)) {
+      if (Number(task.userId) === currentUserId) {
         hasAccess = true;
       }
     }
@@ -174,22 +173,29 @@ export async function PATCH(request, { params }) {
     let isAuthority = false;
     const targetUser = task.user;
 
-    if (user.role === 'SCHOOL_ADMIN') {
+    if (user.role === 'SCHOOL_ADMIN' || user.role === 'ADMIN') {
       isAuthority = true;
     } else if (user.role === 'PRINCIPAL') {
-      const ownerDept = targetUser.departmentId ? await prisma.department.findUnique({ where: { id: targetUser.departmentId } }) : null;
-      const isStaff = targetUser.role === 'FACULTY_STAFF' && ownerDept?.name === 'Admin';
-      if (targetUser.id !== user.userId && !isStaff) {
+      const ownerDept = targetUser?.departmentId ? await prisma.department.findUnique({ where: { id: targetUser.departmentId } }) : null;
+      const isStaff = (targetUser?.role === 'FACULTY_STAFF' || targetUser?.role === 'FACULTY' || targetUser?.role === 'STAFF') && ownerDept?.name === 'Admin';
+      if (Number(targetUser?.id) !== currentUserId && !isStaff) {
         isAuthority = true;
       }
     } else if (user.role === 'PROGRAM_HEAD') {
-      if (targetUser.id !== user.userId && targetUser.role === 'FACULTY_STAFF' && targetUser.departmentId === user.departmentId) {
+      const targetUserDeptId = Number(targetUser?.departmentId);
+      const userDeptId = Number(user.departmentId);
+      const isFacultyRole = targetUser?.role === 'FACULTY_STAFF' || targetUser?.role === 'FACULTY' || targetUser?.role === 'STAFF' || targetUser?.role === 'PROGRAM_HEAD';
+      if (Number(targetUser?.id) !== currentUserId && (isFacultyRole || targetUserDeptId === userDeptId)) {
         isAuthority = true;
       }
     }
 
+    if (task.nominatedById && Number(task.nominatedById) === currentUserId) {
+      isAuthority = true;
+    }
+
     // Determine owner vs supervisor role
-    const isOwner = Number(task.userId) === Number(user.userId);
+    const isOwner = Number(task.userId) === currentUserId;
 
     // Progress and Status flow control
     if (isOwner) {

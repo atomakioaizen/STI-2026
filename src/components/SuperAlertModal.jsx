@@ -136,14 +136,15 @@ export default function SuperAlertModal({
   };
 
   // ─── SUPERVISOR'S ACTION-REQUIRED ITEMS (Subordinates' requests) ───────────
+  const currentUserIdNum = Number(user.id || user.userId);
   const subordinateRequests = (isSupervisor && user.role !== 'SECRETARY') ? tasks.filter(t => {
-    if (actionedTaskIds.includes(t.id)) return false;
-    if (Number(t.userId) === Number(user.id)) return false;
+    if (actionedTaskIds.map(Number).includes(Number(t.id))) return false;
+    if (Number(t.userId) === currentUserIdNum) return false;
     if (t.status === 'Completed' || t.status === 'Archived') return false;
 
     // Scope: PH only sees their dept; Admin/Principal see all
     const inScope = user.role === 'PROGRAM_HEAD'
-      ? (t.user?.departmentId === user.departmentId)
+      ? (Number(t.user?.departmentId) === Number(user.departmentId))
       : true;
 
     if (!inScope) return false;
