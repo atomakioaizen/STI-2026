@@ -25,11 +25,21 @@ export default function DelayEscalationModal({ isOpen, onClose, tasks = [], user
     }
   }, [selectedTask]);
 
+  const [sectorTab, setSectorTab] = useState('ALL'); // 'ALL' | 'FACULTY' | 'ADMIN'
+  const [onlyReplied, setOnlyReplied] = useState(false);
+
   if (!isOpen || !user) return null;
 
   const isAdmin = user.role === 'SCHOOL_ADMIN';
   const isPrincipal = user.role === 'PRINCIPAL';
   const isProgramHead = user.role === 'PROGRAM_HEAD';
+
+  // Helper: check if task has a submitted user/staff reply
+  const hasUserReply = (task) => {
+    if (!task || !task.remarks) return false;
+    const str = typeof task.remarks === 'string' ? task.remarks : JSON.stringify(task.remarks);
+    return str.includes('[USER_REPLY]') || str.includes('[STAFF_REPLY]');
+  };
 
   // 1. Filter active delayed tasks (not completed/archived and delayDays > 0)
   const activeDelayedTasks = tasks.filter(t => {
@@ -61,9 +71,18 @@ export default function DelayEscalationModal({ isOpen, onClose, tasks = [], user
     return t.userId === user.id;
   });
 
-  // 3. Group scoped delayed tasks by User
+  // 3. Apply Sector Tabs and Replied Filter
+  const filteredTasks = scopedTasks.filter(t => {
+    const isAdminDept = t.user?.department?.name === 'Admin' || t.user?.position?.toLowerCase().includes('admin');
+    if (sectorTab === 'ADMIN' && !isAdminDept) return false;
+    if (sectorTab === 'FACULTY' && isAdminDept) return false;
+    if (onlyReplied && !hasUserReply(t)) return false;
+    return true;
+  });
+
+  // 4. Group filtered delayed tasks by User
   const userGroupsMap = new Map();
-  scopedTasks.forEach(t => {
+  filteredTasks.forEach(t => {
     const uId = t.userId;
     const uName = t.user?.name || 'Staff Member';
     const uRole = t.user?.role || 'FACULTY_STAFF';
@@ -84,7 +103,7 @@ export default function DelayEscalationModal({ isOpen, onClose, tasks = [], user
   const userGroups = Array.from(userGroupsMap.values());
 
   // Automatically select first delayed task
-  const currentTask = selectedTask || (scopedTasks.length > 0 ? scopedTasks[0] : null);
+  const currentTask = selectedTask || (filteredTasks.length > 0 ? filteredTasks[0] : null);
 
   const parseRemarksList = (remarksStr) => {
     if (!remarksStr) return [];
@@ -117,8 +136,8 @@ export default function DelayEscalationModal({ isOpen, onClose, tasks = [], user
 
     setIsSubmitting(true);
     try {
-      const typeLabel = actionType === 'NTE' ? 'Notice to Explain (NTE)' : 'Justification Request';
-      const formattedMessage = `[ADMIN_ESCALATION]: Issued ${typeLabel} | Repository Link: ${driveLinkInput.trim()} — Comment: "${chatMessageInput.trim()}"`;
+      const actionTitle = actionType === 'NTE' ? '[ADMIN_ESCALATION] NOTICE TO EXPLAIN (NTE)' : '[ADMIN_NOTICE] FORMAL JUSTIFICATION REQUEST';
+      const formattedMessage = `${actionTitle}: ${chatMessageInput.trim()} — Attached Document Repository: ${driveLinkInput.trim()}`;
 
       const res = await fetch(`/api/tasks/${currentTask.id}`, {
         method: 'PATCH',
@@ -219,6 +238,50 @@ export default function DelayEscalationModal({ isOpen, onClose, tasks = [], user
             className="text-zinc-400 hover:text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200 px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer"
           >
             Close ✕
+          </button>
+        </div>
+
+        {/* Filter Controls Bar */}
+        <div className="bg-zinc-100/90 border-b border-zinc-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+          {/* Sector Tabs */}
+          <div className="flex items-center gap-1.5 bg-white border border-zinc-200 p-1 rounded-xl shadow-xs">
+            <button
+              onClick={() => setSectorTab('ALL')}
+              className={`px-3 py-1 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                sectorTab === 'ALL' ? 'bg-zinc-900 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              All Sectors ({scopedTasks.length})
+            </button>
+            <button
+              onClick={() => setSectorTab('FACULTY')}
+              className={`px-3 py-1 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                sectorTab === 'FACULTY' ? 'bg-blue-600 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              🎓 Faculty / Academics ({scopedTasks.filter(t => !(t.user?.department?.name === 'Admin' || t.user?.position?.toLowerCase().includes('admin'))).length})
+            </button>
+            <button
+              onClick={() => setSectorTab('ADMIN')}
+              className={`px-3 py-1 rounded-lg font-extrabold text-[11px] transition cursor-pointer ${
+                sectorTab === 'ADMIN' ? 'bg-amber-600 text-white shadow-xs' : 'text-zinc-600 hover:text-zinc-900'
+              }`}
+            >
+              🏢 Admin Staff ({scopedTasks.filter(t => (t.user?.department?.name === 'Admin' || t.user?.position?.toLowerCase().includes('admin'))).length})
+            </button>
+          </div>
+
+          {/* Replied Filter Toggle */}
+          <button
+            onClick={() => setOnlyReplied(!onlyReplied)}
+            className={`px-3 py-1.5 rounded-xl font-black text-[11px] border flex items-center gap-1.5 transition cursor-pointer ${
+              onlyReplied 
+                ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm' 
+                : 'bg-white text-zinc-700 border-zinc-300 hover:bg-zinc-50'
+            }`}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            {onlyReplied ? '✓ Showing Replied Only' : '💬 Filter: Show Replied Only'}
           </button>
         </div>
 
